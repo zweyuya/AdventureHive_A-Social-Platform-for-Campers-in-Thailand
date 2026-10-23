@@ -1,0 +1,12 @@
+.env
+__pycache__/
+*.pyc
+.pytest_cache/
+staticfiles/
+media/
+.venv/
+venv/
+.DS_Store
+.idea/
+.vscode/
+node_modules/
