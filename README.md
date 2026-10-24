@@ -1,4 +1,4 @@
-# AdventureHive — Backend (Layers 0–1)
+# AdventureHive — Backend (Layers 0–2)
 
 Camping community platform for Thailand. Django 5.2 + DRF + PostgreSQL.
 
@@ -15,6 +15,7 @@ sudo -u postgres psql -c "CREATE DATABASE adventurehive OWNER adventurehive;"
 cp .env.example .env          # then set SECRET_KEY and FIELD_ENCRYPTION_KEY
 python manage.py migrate
 python manage.py seed_interest_tags
+python manage.py seed_campsites      # 15 real Thai campsites (safe to re-run)
 python manage.py createsuperuser   # asks for email, not username
 python manage.py runserver
 ```
@@ -124,9 +125,54 @@ Account deletion policy: personal data is erased, but the row stays as an anonym
 "Deleted user" so trips and reviews other people rely on stay consistent. (Layer 4 will
 also cancel the user's active RSVPs and promote the waitlist.)
 
+## Layer 2 — Campsites & content workflow
+
+| Method | Endpoint | Who | Notes |
+|---|---|---|---|
+| GET | `/api/campsites/` | anyone | Published only. Filters: `province`, `category` (repeatable), `has_water_source`, `has_restrooms`, `fire_pit_allowed`, `permit_status`, `min_rating`; `search=`; `ordering=name,-avg_rating,…`; 20 per page |
+| GET | `/api/campsites/{id}/` | anyone | Detail with authority (booking URL) and permit info. Submitters also see their own unpublished ones |
+| GET | `/api/map/campsites/` | anyone | GeoJSON `FeatureCollection` for the map (same filters, not paginated) |
+| GET | `/api/campsites/{id}/history/` | anyone | Approved versions: who changed what, when, full snapshot |
+| POST | `/api/campsites/` | member | Create a **draft** (not public) |
+| PATCH/PUT | `/api/campsites/{id}/` | submitter | Only while draft or rejected |
+| POST | `/api/campsites/{id}/submit/` | submitter | draft/rejected → pending_review |
+| GET | `/api/campsites/mine/` | member | Own submissions with status and moderator's note |
+| POST | `/api/campsites/{id}/revisions/` | member | Suggest an edit to a published campsite (any fields + `edit_summary`) |
+| POST | `/api/campsites/{id}/approve/` | staff | pending_review → published (version 1) |
+| POST | `/api/campsites/{id}/reject/` | staff | `{"note": "..."}` required → rejected |
+| GET | `/api/campsite-revisions/` | staff | Queue of pending suggested edits |
+| POST | `/api/campsite-revisions/{id}/approve/` | staff | Applies the suggestion as version N+1 |
+| POST | `/api/campsite-revisions/{id}/reject/` | staff | `{"note": "..."}` required |
+
+**Workflow**
+
+```
+draft ──submit──▶ pending_review ──approve──▶ published (v1) ──suggested edit approved──▶ v2, v3 …
+  ▲                     │
+  └── edit & resubmit ◀─┴──reject (reason required)──▶ rejected
+```
+
+- Public endpoints and the map only ever read `status = published`.
+- **Versioning:** full history for campsites. Every approved change (first approval,
+  approved suggestion, or a moderator's direct edit in the admin) stores a complete
+  snapshot with author, reviewer and summary in `location_revisions`.
+- **Stale-edit protection:** a suggestion records the version it was based on; if the
+  campsite has changed since, approval is refused so it can't silently undo a newer edit.
+- Submitters get a notification when their submission/suggestion is approved or rejected.
+
+**Moderating in the Django admin** (`/admin/` → Locations):
+- *Locations* → filter **Status: Pending review** → select → action **Approve selected** or
+  **Reject selected (with reason)** (asks for the reason on the next page).
+- *Location revisions* → filter **Status: Pending** → approve / reject suggested edits.
+- Editing a published campsite directly in the admin also creates a new version.
+
+**Seed data:** `seed_campsites` loads 15 real campsites in 14 provinces with their managing
+authorities. Coordinates are approximate and permit information is marked *unverified*
+(`permit_status = unknown`) until someone checks with the park office.
+
 ## Next layers
 1. ~~Auth & profile endpoints~~ ✅ done.
-2. Campsites: list/filters, detail, GeoJSON map endpoint, seed data, submission → approve/reject workflow with revisions.
+2. ~~Campsites & content workflow~~ ✅ done.
 3. Groups (optional for the progress report).
 4. Trips: CRUD, status lifecycle, RSVP with `select_for_update`, waitlist promotion, completion command, organizer attendance marking.
 5. Reviews + Q&A endpoints.

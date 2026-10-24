@@ -6,7 +6,7 @@ import pytest
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from accounts.models import Profile, User
+from accounts.models import User
 from locations.models import Location, LocationStatus
 from trips.models import Trip, TripStatus
 
@@ -23,8 +23,7 @@ def make_user(db):
     def _make(email=None, password="Camp1ng!Pass", **extra):
         email = email or f"user{next(_seq)}@example.com"
         user = User.objects.create_user(email=email, password=password, **extra)
-        Profile.objects.create(user=user, display_name=email.split("@")[0])
-        return user
+        return user  # profile is created automatically
 
     return _make
 

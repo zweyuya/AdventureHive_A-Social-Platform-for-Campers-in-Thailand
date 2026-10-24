@@ -18,4 +18,6 @@ urlpatterns = [
     path("api/auth/", include(auth_urlpatterns)),
     path("api/users/", include(users_urlpatterns)),
     path("api/interest-tags/", InterestTagListView.as_view(), name="interest-tags"),
+    # Layer 2 — campsites & content workflow
+    path("api/", include("locations.urls")),
 ]

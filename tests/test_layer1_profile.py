@@ -97,8 +97,6 @@ def test_other_users_cannot_read_or_write_contact(login, user, make_user):
 def test_even_admin_cannot_read_contact(login, user):
     EmergencyContact.objects.create(user=user, **CONTACT)
     admin = User.objects.create_superuser(email="admin@example.com", password="Adm1n-Pass!")
-    from accounts.models import Profile
-    Profile.objects.create(user=admin, display_name="admin")
     client = login(admin, password="Adm1n-Pass!", client=APIClient())
     assert client.get(f"/api/users/{user.pk}/emergency-contact/").status_code == 403
 
@@ -179,3 +177,12 @@ def test_edit_own_profile_when_profile_id_differs_from_user_id(login, user, api_
     login(user)
     res = api_client.patch(f"/api/users/{user.pk}/", {"city": "Krabi"}, format="json")
     assert res.status_code == 200 and res.json()["city"] == "Krabi"
+
+
+@pytest.mark.django_db
+def test_superuser_gets_a_profile_and_can_use_the_api(login):
+    """Regression: createsuperuser users had no profile → 404/500 on /me/."""
+    admin = User.objects.create_superuser(email="root@example.com", password="Adm1n-Pass!")
+    assert admin.profile.display_name == "root"
+    client = login(admin, password="Adm1n-Pass!", client=APIClient())
+    assert client.get("/api/users/me/").status_code == 200

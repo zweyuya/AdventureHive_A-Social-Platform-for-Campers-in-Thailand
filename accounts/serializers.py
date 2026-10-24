@@ -62,11 +62,10 @@ class RegisterSerializer(serializers.Serializer):
             password=validated["password"],
             pdpa_consent_at=timezone.now(),
         )
-        profile = Profile.objects.create(
-            user=user,
-            display_name=validated["display_name"],
-            camping_experience_level=validated["camping_experience_level"],
-        )
+        profile = user.profile  # created by the post_save signal
+        profile.display_name = validated["display_name"]
+        profile.camping_experience_level = validated["camping_experience_level"]
+        profile.save()
         profile.interest_tags.set(tags)
         return user
 
