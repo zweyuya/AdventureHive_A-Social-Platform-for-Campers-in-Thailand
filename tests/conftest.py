@@ -62,3 +62,24 @@ def make_trip(db, make_user, location):
         )
 
     return _make
+
+
+@pytest.fixture(autouse=True)
+def _clear_throttle_cache():
+    """Throttle counters live in the cache; reset them so tests stay independent."""
+    from django.core.cache import cache
+
+    cache.clear()
+
+
+@pytest.fixture
+def login(api_client):
+    """Log a user in through the real endpoint (cookies land on the client)."""
+
+    def _login(user, password="Camp1ng!Pass", client=None):
+        c = client or api_client
+        res = c.post("/api/auth/login/", {"email": user.email, "password": password}, format="json")
+        assert res.status_code == 200, res.content
+        return c
+
+    return _login

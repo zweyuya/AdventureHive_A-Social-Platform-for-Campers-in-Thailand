@@ -1,7 +1,9 @@
 from django.contrib import admin
-from django.urls import path
+from django.urls import include, path
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 
+from accounts.urls import auth_urlpatterns, users_urlpatterns
+from accounts.views import InterestTagListView
 from core.views import health
 
 admin.site.site_header = "AdventureHive admin"
@@ -12,5 +14,8 @@ urlpatterns = [
     path("api/health/", health, name="health"),
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"),
-    # Layer 1+: path("api/auth/", include("accounts.urls")), etc.
+    # Layer 1 — auth & profiles
+    path("api/auth/", include(auth_urlpatterns)),
+    path("api/users/", include(users_urlpatterns)),
+    path("api/interest-tags/", InterestTagListView.as_view(), name="interest-tags"),
 ]
