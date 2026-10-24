@@ -61,16 +61,28 @@ class EquipmentSerializer(serializers.ModelSerializer):
 class TripDetailSerializer(TripListSerializer):
     equipment_items = EquipmentSerializer(many=True, read_only=True)
     waitlist_count = serializers.SerializerMethodField()
+    can_review = serializers.SerializerMethodField(
+        help_text="True when the current user may write a review for this trip now.")
 
     class Meta(TripListSerializer.Meta):
         fields = TripListSerializer.Meta.fields + [
             "activity_type", "description", "distance_km", "estimated_duration_hours",
             "safety_notes", "meeting_point_name", "meeting_latitude", "meeting_longitude",
-            "equipment_items", "waitlist_count", "created_at", "updated_at",
+            "equipment_items", "waitlist_count", "can_review", "created_at", "updated_at",
         ]
 
     def get_waitlist_count(self, obj) -> int:
         return obj.participants.filter(status=PS.WAITLISTED).count()
+
+    def get_can_review(self, obj) -> bool:
+        from reviews.services import REVIEW_WINDOW  # local import: reviews depends on trips
+        return (
+            obj.status == TripStatus.COMPLETED
+            and self._mine(obj)[0] == PS.ATTENDED
+            and obj.organizer_id != self.context["request"].user.pk
+            and obj.pk not in self.context.get("my_reviewed", set())
+            and timezone.now() <= obj.end_datetime + REVIEW_WINDOW
+        )
 
     def to_representation(self, instance):
         data = super().to_representation(instance)

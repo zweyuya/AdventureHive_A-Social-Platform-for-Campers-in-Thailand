@@ -1,4 +1,4 @@
-# AdventureHive — Backend (Layers 0, 1, 2, 4)
+# AdventureHive — Backend (Layers 0–5)
 
 Camping community platform for Thailand. Django 5.2 + DRF + PostgreSQL.
 
@@ -170,6 +170,33 @@ draft ──submit──▶ pending_review ──approve──▶ published (v1)
 authorities. Coordinates are approximate and permit information is marked *unverified*
 (`permit_status = unknown`) until someone checks with the park office.
 
+## Layer 3 — Community groups
+
+| Method | Endpoint | Who | Notes |
+|---|---|---|---|
+| GET | `/api/groups/` | anyone | Filters: `category`, `privacy_type`; `search=`; sorted by size. Includes `my_role` |
+| GET | `/api/groups/{id}/` | anyone | |
+| POST | `/api/groups/` | member | Creator becomes the group **admin** |
+| PATCH / DELETE | `/api/groups/{id}/` | group admin | Deleting keeps the group's trips (group set to null) |
+| POST / DELETE | `/api/groups/{id}/join/` | member | Join a **public** group / leave. The last admin can't leave |
+| GET | `/api/groups/{id}/members/` | anyone (private: members only) | Active members |
+| POST | `/api/groups/{id}/members/` | admin, co-admin | `{"user_id"}` — the only way into a private group |
+| POST | `/api/groups/{id}/members/{user_id}/remove/` | admin, co-admin | Co-admins may remove ordinary members only |
+| POST | `/api/groups/{id}/members/{user_id}/ban/` | admin | Banned users can't rejoin by themselves |
+| POST | `/api/groups/{id}/members/{user_id}/role/` | admin | `{"role": "member" \| "co_admin" \| "admin"}`; at least one admin must remain |
+| GET | `/api/groups/{id}/trips/` | anyone (private: members only) | The group's trips |
+| GET | `/api/groups/mine/` | member | Groups I belong to |
+
+- **In-group roles** (`role_in_group`) are separate from Django's platform roles and are
+  checked by the `IsGroupAdmin` / `IsGroupModerator` permission classes.
+- **member_count** counts active members only and is changed only inside a transaction with
+  the group row locked, so it always matches the membership table (tested).
+- Rejoining after leaving reuses the same membership row (`UNIQUE (group, user)`).
+- Trips can be attached to a group only by its members; trips in private groups are
+  visible to members only.
+- Account deletion: the user leaves all groups; a sole admin is succeeded by the
+  longest-standing co-admin, otherwise the longest-standing member.
+
 ## Layer 4 — Trips, RSVP, waitlist, attendance
 
 | Method | Endpoint | Who | Notes |
@@ -222,9 +249,52 @@ Cron example on the server:
 */15 * * * * cd /path/to/adventurehive && .venv/bin/python manage.py complete_trips
 ```
 
+## Layer 5 — Verified reviews & Q&A forum
+
+**Reviews**
+
+| Method | Endpoint | Who | Notes |
+|---|---|---|---|
+| GET | `/api/campsites/{id}/reviews/` | anyone | Published reviews, newest first; each has `verified_attendee: true` |
+| POST | `/api/reviews/` | attended participant | `{"trip_id", "rating" 1–5, "review_text"}`; campsite is taken from the trip |
+| PATCH / DELETE | `/api/reviews/{id}/` | author | Within the review window; ratings recalculated |
+| GET | `/api/reviews/mine/` | member | My reviews |
+| POST | `/api/reviews/{id}/hide/` · `/restore/` | moderator | Hidden reviews leave the rating |
+
+Who may review: the trip is **completed**, the organizer marked you **attended**, you are
+not the organizer, one review per trip, within **30 days** of the trip ending. Checked in
+the API (clear error messages) *and* by the PostgreSQL trigger. `avg_rating` and
+`review_count` are recalculated in the same transaction (campsite row locked).
+`GET /api/trips/{id}/` returns `can_review` so the app knows when to show the button.
+
+**Q&A forum**
+
+| Method | Endpoint | Who | Notes |
+|---|---|---|---|
+| GET | `/api/questions/?location={campsite id}` | anyone | Filters: `location`, `status`, `unanswered`; `search=` |
+| GET | `/api/questions/{id}/` | anyone | With answers |
+| POST | `/api/questions/` | member | `{"location_id" (optional), "title", "body"}` |
+| PATCH | `/api/questions/{id}/` | author | Sets `edited_at`, `last_edited_by` |
+| POST | `/api/questions/{id}/answers/` | member | Asker is notified |
+| PATCH | `/api/answers/{id}/` | author | Sets `edited_at` |
+| POST | `/api/questions/{id}/accept/` | asker | `{"answer_id"}` → question `answered` |
+| POST | `/api/questions/{id}/close/` | asker or moderator | No more answers |
+| POST | `/api/questions/{id}/hide/` · `/restore/`, `/api/answers/{id}/hide/` · `/restore/` | moderator | Hiding the accepted answer re-opens the question |
+
+Q&A is **post-moderated** (appears immediately; moderators hide abuse). Versioning:
+current version + edited marker (no full history — single-author content).
+
+## End-to-end test
+
+`tests/test_end_to_end.py` walks the whole demo flow through the public API only:
+register (PDPA) → browse campsites & map → create/publish trip → RSVP → second user
+waitlisted → cancel → automatic promotion → trip completes → organizer marks attendance →
+verified review → campsite rating updated.
+
 ## Next layers
 1. ~~Auth & profile endpoints~~ ✅ done.
 2. ~~Campsites & content workflow~~ ✅ done.
-3. Groups (optional for the progress report).
+3. ~~Community groups~~ ✅ done.
 4. ~~Trips, RSVP, waitlist, attendance~~ ✅ done.
-5. Reviews + Q&A endpoints.
+5. ~~Reviews + Q&A endpoints~~ ✅ done.
+6. Minimal React frontend for the demo flow; deployment to the CSIM server.

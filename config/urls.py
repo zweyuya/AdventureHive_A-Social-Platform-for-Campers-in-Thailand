@@ -20,6 +20,11 @@ urlpatterns = [
     path("api/interest-tags/", InterestTagListView.as_view(), name="interest-tags"),
     # Layer 2 — campsites & content workflow
     path("api/", include("locations.urls")),
+    # Layer 3 — community groups
+    path("api/", include("communities.urls")),
     # Layer 4 — trips, RSVP, waitlist, attendance
     path("api/", include("trips.urls")),
+    # Layer 5 — verified reviews & Q&A forum
+    path("api/", include("reviews.urls")),
+    path("api/", include("qa.urls")),
 ]

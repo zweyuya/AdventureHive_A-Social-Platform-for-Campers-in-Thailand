@@ -152,6 +152,12 @@ SPECTACULAR_SETTINGS = {
         "LocationStatusEnum": "locations.models.LocationStatus",
         "RevisionStatusEnum": "locations.models.RevisionStatus",
         "UserStatusEnum": "accounts.models.UserStatus",
+        "ContentStatusEnum": "reviews.models.ReviewStatus",  # published / hidden
+        "QuestionStatusEnum": "qa.models.QuestionStatus",
+        "GroupMemberStatusEnum": "communities.models.GroupMemberStatus",
+        "GroupMemberRoleEnum": "communities.models.GroupMemberRole",
+        "GroupCategoryEnum": "communities.models.GroupCategory",
+        "CampsiteCategoryEnum": "locations.models.LocationCategory",
     },
 }
 

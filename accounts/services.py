@@ -23,10 +23,14 @@ def delete_account(user: User) -> None:
 
     Their active RSVPs are cancelled (waitlisted people are promoted into the
     freed seats) and upcoming trips they organise are cancelled with notices.
+    They leave all groups; a sole group admin is succeeded by the longest-standing
+    co-admin (or member).
     """
-    from trips.services import withdraw_user  # local import avoids a cycle
+    from communities.services import withdraw_user as leave_groups  # local imports
+    from trips.services import withdraw_user as leave_trips          # avoid cycles
 
-    withdraw_user(user)
+    leave_trips(user)
+    leave_groups(user)
     user = User.objects.select_for_update().get(pk=user.pk)
     now = timezone.now()
 

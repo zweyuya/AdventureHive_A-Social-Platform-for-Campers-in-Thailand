@@ -122,6 +122,9 @@ class TripViewSet(viewsets.ModelViewSet):
                 t: (s, p) for t, s, p in TripParticipant.objects.filter(user=user)
                 .values_list("trip_id", "status", "waitlist_position")
             }
+            from reviews.models import Review
+            ctx["my_reviewed"] = set(Review.objects.filter(user=user)
+                                     .values_list("trip_id", flat=True))
         return ctx
 
     def _detail(self, trip, code=status.HTTP_200_OK):
