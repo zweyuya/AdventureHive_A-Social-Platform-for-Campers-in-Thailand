@@ -1,4 +1,4 @@
-# AdventureHive — Backend (Layers 0–2)
+# AdventureHive — Backend (Layers 0, 1, 2, 4)
 
 Camping community platform for Thailand. Django 5.2 + DRF + PostgreSQL.
 
@@ -170,9 +170,61 @@ draft ──submit──▶ pending_review ──approve──▶ published (v1)
 authorities. Coordinates are approximate and permit information is marked *unverified*
 (`permit_status = unknown`) until someone checks with the park office.
 
+## Layer 4 — Trips, RSVP, waitlist, attendance
+
+| Method | Endpoint | Who | Notes |
+|---|---|---|---|
+| GET | `/api/trips/` | anyone | Upcoming published/full trips by default; `?status=completed` etc. Filters: `location`, `province`, `difficulty`, `min_experience_level`, `start_after`, `start_before`, `has_spots`; `search=` |
+| GET | `/api/trips/{id}/` | anyone | Includes `my_status`, `my_waitlist_position`, `spots_left`, `waitlist_count`. Exact meeting point only for the organizer and confirmed participants |
+| POST | `/api/trips/` | member | Creates a **draft** at a published campsite |
+| PATCH/PUT | `/api/trips/{id}/` | organizer | Raising capacity promotes the waitlist; date/place changes notify participants |
+| DELETE | `/api/trips/{id}/` | organizer or moderator | **Cancels** the trip (never deleted); participants notified |
+| POST | `/api/trips/{id}/publish/` | organizer | draft → published |
+| POST | `/api/trips/{id}/rsvp/` | member | Join: `confirmed` if a seat is free, else `waitlisted` with a position. Rate-limited (10/min) |
+| DELETE | `/api/trips/{id}/rsvp/` | participant | Leave: waitlist #1 is promoted automatically; positions renumbered |
+| GET | `/api/trips/{id}/participants/` | organizer only | Admins get 403 too (participant privacy) |
+| POST | `/api/trips/{id}/attendance/` | organizer | After completion, within 7 days: `{"records": [{"user_id": 5, "status": "attended"}, …]}` |
+| GET | `/api/trips/mine/` | member | Trips I organise or joined |
+| GET/POST/PATCH/DELETE | `/api/trips/{id}/equipment/` | read: anyone · write: organizer | Equipment checklist |
+
+**Status lifecycle** (one central `transition()` function rejects anything else):
+
+```
+draft ──publish──▶ published ◀── seats free / last seat taken ──▶ full
+  │                    │                                           │
+  └──────── cancel ────┴───────────────────────────────────────────┴──▶ cancelled
+                       └──── end time passes (complete_trips) ─────┴──▶ completed
+```
+
+**How overbooking is prevented**
+1. Every seat-changing operation (`rsvp`, `cancel_rsvp`, capacity edit) runs in
+   `transaction.atomic()` and locks the trip row with `select_for_update()`.
+   Concurrent requests for the same trip are processed one after another.
+2. Database backstops: `CHECK (confirmed_count <= participant_capacity)`,
+   `UNIQUE (trip_id, user_id)`, and a deferrable `UNIQUE (trip_id, waitlist_position)`.
+3. `tests/test_layer4_concurrency.py` releases 20 threads at the same instant for one
+   seat: exactly 1 confirmed, 19 waitlisted at positions 1–19. With the lock removed,
+   the same test fails (requests collide on the same waitlist position).
+
+**Attendance & review credibility**
+- `python manage.py complete_trips` (schedule it, e.g. every 15 min with cron) marks
+  finished trips `completed`. Confirmed participants stay *confirmed* (not automatically
+  attended); anyone still waitlisted becomes *cancelled*; the organizer is reminded.
+- The organizer then records **attended / no-show** within 7 days. Only *attended*
+  participants can review (enforced by the API **and** the database trigger), and a
+  reviewer's attendance can't be revoked afterwards.
+
+**Design decision:** the organizer is not counted as a participant (capacity = seats for
+people joining).
+
+Cron example on the server:
+```
+*/15 * * * * cd /path/to/adventurehive && .venv/bin/python manage.py complete_trips
+```
+
 ## Next layers
 1. ~~Auth & profile endpoints~~ ✅ done.
 2. ~~Campsites & content workflow~~ ✅ done.
 3. Groups (optional for the progress report).
-4. Trips: CRUD, status lifecycle, RSVP with `select_for_update`, waitlist promotion, completion command, organizer attendance marking.
+4. ~~Trips, RSVP, waitlist, attendance~~ ✅ done.
 5. Reviews + Q&A endpoints.

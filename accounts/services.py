@@ -21,8 +21,12 @@ def delete_account(user: User) -> None:
     user" so trips they organised and reviews they wrote stay consistent for
     other people (and campsite ratings do not silently change).
 
-    Layer 4 adds: cancel the user's active RSVPs and promote waitlisted users.
+    Their active RSVPs are cancelled (waitlisted people are promoted into the
+    freed seats) and upcoming trips they organise are cancelled with notices.
     """
+    from trips.services import withdraw_user  # local import avoids a cycle
+
+    withdraw_user(user)
     user = User.objects.select_for_update().get(pk=user.pk)
     now = timezone.now()
 

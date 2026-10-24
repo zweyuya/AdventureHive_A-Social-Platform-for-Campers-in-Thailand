@@ -143,6 +143,16 @@ SPECTACULAR_SETTINGS = {
     "VERSION": "0.1.0",
     "SERVE_INCLUDE_SCHEMA": False,
     "COMPONENT_SPLIT_REQUEST": True,
+    # Give shared choice sets one clear name in the API docs
+    "ENUM_NAME_OVERRIDES": {
+        "ExperienceLevelEnum": "core.models.ExperienceLevel",
+        "TripStatusEnum": "trips.models.TripStatus",
+        "ParticipantStatusEnum": "trips.models.ParticipantStatus",
+        "AttendanceStatusEnum": [("attended", "Attended"), ("no_show", "No-show")],
+        "LocationStatusEnum": "locations.models.LocationStatus",
+        "RevisionStatusEnum": "locations.models.RevisionStatus",
+        "UserStatusEnum": "accounts.models.UserStatus",
+    },
 }
 
 # --------------------------------------------------------------------------
