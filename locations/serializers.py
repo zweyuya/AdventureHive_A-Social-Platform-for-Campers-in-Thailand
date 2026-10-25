@@ -11,16 +11,30 @@ class AuthoritySerializer(serializers.ModelSerializer):
                   "website_url", "booking_url", "description"]
 
 
+def image_url(location) -> str | None:
+    """Site-relative URL (/media/...) so it works behind any proxy or domain."""
+    return location.cover_image.url if location.cover_image else None
+
+
 class CampsiteListSerializer(serializers.ModelSerializer):
+    cover_image = serializers.SerializerMethodField()
+
     class Meta:
         model = Location
         fields = ["id", "name", "province", "category", "latitude", "longitude",
                   "avg_rating", "review_count", "has_water_source", "has_restrooms",
-                  "fire_pit_allowed", "permit_status"]
+                  "fire_pit_allowed", "permit_status", "cover_image", "cover_image_credit"]
+
+    def get_cover_image(self, obj) -> str | None:
+        return image_url(obj)
 
 
 class CampsiteDetailSerializer(serializers.ModelSerializer):
     authority = AuthoritySerializer(read_only=True)
+    cover_image = serializers.SerializerMethodField()
+
+    def get_cover_image(self, obj) -> str | None:
+        return image_url(obj)
 
     class Meta:
         model = Location
@@ -32,6 +46,7 @@ class CampsiteDetailSerializer(serializers.ModelSerializer):
             "rules", "permit_info_source", "permit_info_verified_at",
             "avg_rating", "review_count", "status", "moderation_note",
             "current_version", "created_at", "updated_at",
+            "cover_image", "cover_image_credit",
         ]
 
     def to_representation(self, instance):

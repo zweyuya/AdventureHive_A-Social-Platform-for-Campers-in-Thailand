@@ -1,13 +1,10 @@
 from rest_framework import serializers
 
+from core.people import person as _person
+
 from locations.models import Location
 
 from .models import Answer, AnswerStatus, Question
-
-
-def _person(user) -> dict:
-    profile = getattr(user, "profile", None)
-    return {"id": user.pk, "display_name": profile.display_name if profile else "Unknown"}
 
 
 class AnswerSerializer(serializers.ModelSerializer):

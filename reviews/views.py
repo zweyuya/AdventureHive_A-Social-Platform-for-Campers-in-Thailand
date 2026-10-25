@@ -18,10 +18,11 @@ class ReviewPagination(PageNumberPagination):
 
 
 @extend_schema(tags=["reviews"])
-class ReviewViewSet(mixins.RetrieveModelMixin, mixins.CreateModelMixin,
+class ReviewViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.CreateModelMixin,
                     mixins.UpdateModelMixin, mixins.DestroyModelMixin,
                     viewsets.GenericViewSet):
     """
+    list     — anyone: latest published reviews across all campsites (dashboard feed)
     create   — attended participants of a completed trip (within 30 days)
     update   — author (within the review window)
     destroy  — author
@@ -30,10 +31,13 @@ class ReviewViewSet(mixins.RetrieveModelMixin, mixins.CreateModelMixin,
     """
 
     http_method_names = ["get", "post", "patch", "delete", "head", "options"]
+    pagination_class = ReviewPagination
 
     def get_queryset(self):
-        qs = Review.objects.select_related("user__profile", "trip")
+        qs = Review.objects.select_related("user__profile", "trip", "location").order_by("-created_at")
         user = self.request.user
+        if self.action == "list":
+            return qs.filter(status=ReviewStatus.PUBLISHED, location__status="published")
         if user.is_authenticated and user.is_staff:
             return qs
         if self.action in ("partial_update", "update", "destroy", "mine"):
@@ -41,7 +45,7 @@ class ReviewViewSet(mixins.RetrieveModelMixin, mixins.CreateModelMixin,
         return qs.filter(status=ReviewStatus.PUBLISHED)
 
     def get_permissions(self):
-        if self.action == "retrieve":
+        if self.action in ("retrieve", "list"):
             return [permissions.AllowAny()]
         if self.action in ("hide", "restore"):
             return [permissions.IsAdminUser()]

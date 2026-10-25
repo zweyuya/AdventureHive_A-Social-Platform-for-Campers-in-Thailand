@@ -1,5 +1,8 @@
 from django.conf import settings
-from django.core.validators import MaxValueValidator, MinValueValidator
+from django.core.validators import FileExtensionValidator, MaxValueValidator, MinValueValidator
+from uuid import uuid4
+
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import Q
 
@@ -36,6 +39,19 @@ class LocationStatus(models.TextChoices):
     PUBLISHED = "published", "Published"
     REJECTED = "rejected", "Rejected"
     ARCHIVED = "archived", "Archived"
+
+
+MAX_IMAGE_BYTES = 5 * 1024 * 1024
+
+
+def validate_image_size(file):
+    if file.size > MAX_IMAGE_BYTES:
+        raise ValidationError("The photo must be 5 MB or smaller.")
+
+
+def campsite_image_path(instance, filename):
+    ext = filename.rsplit(".", 1)[-1].lower()
+    return f"campsites/{instance.pk or 'new'}-{uuid4().hex[:8]}.{ext}"
 
 
 class Authority(models.Model):
@@ -102,6 +118,18 @@ class Location(TimeStampedModel):
         validators=[MinValueValidator(1), MaxValueValidator(5)],
     )
     review_count = models.PositiveIntegerField(default=0)
+
+    # Cover photo, uploaded by moderators in the admin. The credit is shown under
+    # the photo (e.g. "Photo: Jane Doe, CC BY-SA 4.0 via Wikimedia Commons").
+    cover_image = models.ImageField(
+        upload_to=campsite_image_path, blank=True,
+        validators=[FileExtensionValidator(["jpg", "jpeg", "png", "webp"]), validate_image_size],
+        help_text="JPEG, PNG or WebP, max 5 MB. Landscape photos look best.",
+    )
+    cover_image_credit = models.CharField(
+        max_length=300, blank=True,
+        help_text="Who took the photo and its licence / source. Required if you use someone else's photo.",
+    )
 
     # Future work (semantic search). Kept as JSON until pgvector is adopted.
     embedding = models.JSONField(null=True, blank=True)

@@ -17,9 +17,14 @@ class NotificationType(models.TextChoices):
     ANSWER_POSTED = "answer_posted", "New answer to your question"
     # Social
     FOLLOW = "follow", "New follower"
-    LIKE = "like", "Post liked"
+    LIKE = "like", "Post liked"            # kept for compatibility; reactions use REACTION
+    REACTION = "reaction", "Reaction to your post"
     COMMENT = "comment", "New comment"
+    REPLY = "reply", "Reply to your comment"
     GROUP_POST = "group_post", "New post in your group"
+    POST_PENDING = "post_pending", "Post waiting for your approval"
+    POST_APPROVED = "post_approved", "Your post was approved"
+    POST_REJECTED = "post_rejected", "Your post was not approved"
 
 
 class ReferenceType(models.TextChoices):

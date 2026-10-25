@@ -1,6 +1,8 @@
 from django.utils import timezone
 from rest_framework import serializers
 
+from core.people import avatar_url, display_name as _display_name, person
+
 from communities.models import CampingGroup
 from locations.models import Location
 
@@ -10,14 +12,14 @@ from .services import update_trip
 
 
 class _MiniLocation(serializers.ModelSerializer):
+    cover_image = serializers.SerializerMethodField()
+
     class Meta:
         model = Location
-        fields = ["id", "name", "province", "latitude", "longitude"]
+        fields = ["id", "name", "province", "latitude", "longitude", "cover_image"]
 
-
-def _display_name(user) -> str:
-    profile = getattr(user, "profile", None)
-    return profile.display_name if profile else "Unknown"
+    def get_cover_image(self, obj) -> str | None:
+        return obj.cover_image.url if obj.cover_image else None
 
 
 class _MyStatusMixin(serializers.Serializer):
@@ -49,7 +51,7 @@ class TripListSerializer(_MyStatusMixin, serializers.ModelSerializer):
                   "my_status", "my_waitlist_position"]
 
     def get_organizer(self, obj) -> dict:
-        return {"id": obj.organizer_id, "display_name": _display_name(obj.organizer)}
+        return person(obj.organizer)
 
 
 class EquipmentSerializer(serializers.ModelSerializer):
@@ -148,16 +150,20 @@ class TripWriteSerializer(serializers.ModelSerializer):
 class ParticipantSerializer(serializers.ModelSerializer):
     user_id = serializers.IntegerField(read_only=True)
     display_name = serializers.SerializerMethodField()
+    avatar = serializers.SerializerMethodField()
     camping_experience_level = serializers.CharField(
         source="user.profile.camping_experience_level", read_only=True)
 
     class Meta:
         model = TripParticipant
-        fields = ["user_id", "display_name", "camping_experience_level", "status",
+        fields = ["user_id", "display_name", "avatar", "camping_experience_level", "status",
                   "waitlist_position", "joined_at", "attendance_marked_at"]
 
     def get_display_name(self, obj) -> str:
         return _display_name(obj.user)
+
+    def get_avatar(self, obj) -> str | None:
+        return avatar_url(obj.user)
 
 
 class RsvpResultSerializer(serializers.ModelSerializer):

@@ -1,4 +1,4 @@
-# AdventureHive — Backend (Layers 0–5)
+# AdventureHive (Layers 0–5 + React frontend)
 
 Camping community platform for Thailand. Django 5.2 + DRF + PostgreSQL.
 
@@ -16,6 +16,7 @@ cp .env.example .env          # then set SECRET_KEY and FIELD_ENCRYPTION_KEY
 python manage.py migrate
 python manage.py seed_interest_tags
 python manage.py seed_campsites      # 15 real Thai campsites (safe to re-run)
+python manage.py seed_demo           # optional: demo users, groups, trips, reviews
 python manage.py createsuperuser   # asks for email, not username
 python manage.py runserver
 ```
@@ -28,6 +29,8 @@ python manage.py runserver
 | `/api/health/` | Liveness check (Django + DB) |
 
 Run tests: `pytest` (needs PostgreSQL — the triggers and constraints are PostgreSQL features; the test user needs `CREATEDB`).
+
+**Frontend:** see [`frontend/README.md`](frontend/README.md) — run `npm install` and `npm run dev` in `frontend/`, then open http://localhost:5173.
 
 ## Apps
 
@@ -92,6 +95,7 @@ Not modelled yet (future work): messaging (conversations, messages), media uploa
 | POST | `/api/auth/logout/` | refresh cookie | Blacklists refresh token, clears cookies |
 | DELETE | `/api/auth/account/` | yes + password | PDPA deletion: anonymises the account, deletes the emergency contact, revokes all tokens |
 | GET | `/api/users/me/` | yes | Own full profile (email, phone, consent date…) |
+| PUT / DELETE | `/api/users/me/avatar/` | yes | Upload (multipart `avatar`) or remove the profile photo; resized to 400×400 JPEG with metadata (GPS) stripped |
 | GET | `/api/users/{id}/` | none | Public profile (no email/phone/birth date/gender) |
 | PATCH | `/api/users/{id}/` | owner | Edit own profile; email/status/consent are read-only |
 | GET/PUT/DELETE | `/api/users/{id}/emergency-contact/` | owner only | 403 for everyone else, **including admins** |
@@ -284,6 +288,12 @@ the API (clear error messages) *and* by the PostgreSQL trigger. `avg_rating` and
 Q&A is **post-moderated** (appears immediately; moderators hide abuse). Versioning:
 current version + edited marker (no full history — single-author content).
 
+## Notifications
+
+`GET /api/notifications/` (latest 30 + unread count, with a readable message and an app link)
+and `POST /api/notifications/read-all/` power the bell icon. `GET /api/reviews/` is the public
+feed of recent verified reviews.
+
 ## End-to-end test
 
 `tests/test_end_to_end.py` walks the whole demo flow through the public API only:
@@ -297,4 +307,5 @@ verified review → campsite rating updated.
 3. ~~Community groups~~ ✅ done.
 4. ~~Trips, RSVP, waitlist, attendance~~ ✅ done.
 5. ~~Reviews + Q&A endpoints~~ ✅ done.
-6. Minimal React frontend for the demo flow; deployment to the CSIM server.
+6. ~~React frontend~~ ✅ done.
+7. Deployment to the CSIM server.

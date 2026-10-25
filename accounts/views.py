@@ -7,6 +7,7 @@ from drf_spectacular.utils import extend_schema, inline_serializer
 from rest_framework import generics, permissions, serializers, status
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
+from rest_framework.parsers import MultiPartParser
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 from rest_framework_simplejwt.exceptions import TokenError
@@ -16,9 +17,11 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from core.permissions import IsOwner, IsSelfOrReadOnly
 
 from .cookies import clear_auth_cookies, set_auth_cookies
+from .images import process_avatar
 from .models import EmergencyContact, InterestTag, Profile
 from .serializers import (
     AccountDeleteSerializer,
+    AvatarUploadSerializer,
     EmergencyContactSerializer,
     InterestTagSerializer,
     LoginSerializer,
@@ -234,3 +237,32 @@ class InterestTagListView(generics.ListAPIView):
     permission_classes = [permissions.AllowAny]
     pagination_class = None
 
+
+
+@extend_schema(tags=["users"])
+class AvatarView(APIView):
+    """PUT a new profile photo (multipart field `avatar`) · DELETE to remove it."""
+
+    parser_classes = [MultiPartParser]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "auth"
+
+    @extend_schema(request={"multipart/form-data": AvatarUploadSerializer},
+                   responses=PrivateProfileSerializer)
+    def put(self, request):
+        serializer = AvatarUploadSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        clean = process_avatar(serializer.validated_data["avatar"])
+        profile = request.user.profile
+        old = profile.avatar.name if profile.avatar else None
+        profile.avatar.save(clean.name, clean, save=True)
+        if old:
+            profile.avatar.storage.delete(old)  # don't keep replaced photos
+        return Response(PrivateProfileSerializer(profile).data)
+
+    @extend_schema(request=None, responses=PrivateProfileSerializer)
+    def delete(self, request):
+        profile = request.user.profile
+        if profile.avatar:
+            profile.avatar.delete(save=True)    # removes the file too
+        return Response(PrivateProfileSerializer(profile).data)

@@ -97,7 +97,8 @@ def test_geojson_is_valid_and_filtered(api_client, sites):
     feature = next(f for f in body["features"] if f["properties"]["name"] == "Lam Ta Khong")
     assert feature["type"] == "Feature"
     assert feature["geometry"] == {"type": "Point", "coordinates": [101.38, 14.43]}  # [lng, lat]
-    assert set(feature["properties"]) == {"id", "name", "category", "province", "avg_rating"}
+    assert set(feature["properties"]) == {"id", "name", "category", "province", "avg_rating",
+                                       "cover_image"}
 
     filtered = api_client.get("/api/map/campsites/?province=Nakhon Ratchasima").json()
     assert [f["properties"]["name"] for f in filtered["features"]] == ["Lam Ta Khong"]

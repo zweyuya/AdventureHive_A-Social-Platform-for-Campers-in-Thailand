@@ -155,6 +155,8 @@ SPECTACULAR_SETTINGS = {
         "ContentStatusEnum": "reviews.models.ReviewStatus",  # published / hidden
         "QuestionStatusEnum": "qa.models.QuestionStatus",
         "GroupMemberStatusEnum": "communities.models.GroupMemberStatus",
+        "PostStatusEnum": "social.models.PostStatus",
+        "ReactionTypeEnum": "social.models.ReactionType",
         "GroupMemberRoleEnum": "communities.models.GroupMemberRole",
         "GroupCategoryEnum": "communities.models.GroupCategory",
         "CampsiteCategoryEnum": "locations.models.LocationCategory",
@@ -186,6 +188,9 @@ CSRF_COOKIE_HTTPONLY = False
 CSRF_COOKIE_SAMESITE = "Strict"
 CSRF_COOKIE_SECURE = JWT_COOKIE_SECURE
 CSRF_TRUSTED_ORIGINS = env("CSRF_TRUSTED_ORIGINS")
+if DEBUG:  # the Vite dev server can be opened as localhost or 127.0.0.1
+    CSRF_TRUSTED_ORIGINS += [o for o in ("http://localhost:5173", "http://127.0.0.1:5173")
+                             if o not in CSRF_TRUSTED_ORIGINS]
 SESSION_COOKIE_SECURE = JWT_COOKIE_SECURE
 
 # CORS is only needed in development (React dev server on another port).
@@ -221,7 +226,9 @@ USE_TZ = True
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 MEDIA_URL = "media/"
+MEDIA_URL_ABS = "/media/"  # site-relative prefix used in API responses
 MEDIA_ROOT = BASE_DIR / "media"
+DATA_UPLOAD_MAX_MEMORY_SIZE = 6 * 1024 * 1024  # campsite photos are capped at 5 MB
 
 # Never log request bodies (they can contain passwords / emergency contacts).
 LOGGING = {

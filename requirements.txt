@@ -8,6 +8,7 @@ psycopg[binary]>=3.2
 django-environ>=0.12
 bcrypt>=4.2
 cryptography>=44
+Pillow>=10.4   # campsite photos (ImageField)
 gunicorn>=23
 
 # Testing

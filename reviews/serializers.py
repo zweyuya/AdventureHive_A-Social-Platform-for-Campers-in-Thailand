@@ -1,30 +1,32 @@
 from rest_framework import serializers
 
+from core.people import person
+
 from trips.models import Trip
 
 from .models import Review
-
-
-def _display_name(user) -> str:
-    profile = getattr(user, "profile", None)
-    return profile.display_name if profile else "Unknown"
 
 
 class ReviewSerializer(serializers.ModelSerializer):
     author = serializers.SerializerMethodField()
     trip = serializers.SerializerMethodField()
     campsite_id = serializers.IntegerField(source="location_id", read_only=True)
+    campsite_name = serializers.CharField(source="location.name", read_only=True)
+    campsite_image = serializers.SerializerMethodField()
     verified_attendee = serializers.SerializerMethodField(
         help_text="Always true: only attended participants can review.")
 
     class Meta:
         model = Review
-        fields = ["id", "campsite_id", "rating", "review_text", "author", "trip",
+        fields = ["id", "campsite_id", "campsite_name", "campsite_image", "rating", "review_text", "author", "trip",
                   "verified_attendee", "status", "created_at", "edited_at"]
         read_only_fields = fields
 
+    def get_campsite_image(self, obj) -> str | None:
+        return obj.location.cover_image.url if obj.location.cover_image else None
+
     def get_author(self, obj) -> dict:
-        return {"id": obj.user_id, "display_name": _display_name(obj.user)}
+        return person(obj.user)
 
     def get_trip(self, obj) -> dict:
         return {"id": obj.trip_id, "title": obj.trip.title,

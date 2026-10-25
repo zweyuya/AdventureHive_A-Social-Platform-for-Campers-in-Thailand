@@ -1,5 +1,6 @@
 from django import forms
 from django.contrib import admin, messages
+from django.utils.html import format_html
 from django.template.response import TemplateResponse
 from rest_framework.exceptions import ValidationError
 
@@ -78,12 +79,12 @@ class LocationRevisionInline(admin.TabularInline):
 
 @admin.register(Location)
 class LocationAdmin(admin.ModelAdmin):
-    list_display = ("name", "province", "category", "status", "created_by",
+    list_display = ("name", "province", "category", "status", "has_photo", "created_by",
                     "permit_status", "current_version", "updated_at")
     list_filter = ("status", "province", "category", "permit_status")
     search_fields = ("name", "province")
     readonly_fields = ("avg_rating", "review_count", "current_version", "reviewed_by",
-                       "reviewed_at", "created_by", "created_at", "updated_at")
+                       "reviewed_at", "created_by", "created_at", "updated_at", "photo_preview")
     raw_id_fields = ("authority",)
     inlines = [LocationRevisionInline]
     actions = ["approve_selected", "reject_selected"]
@@ -93,12 +94,25 @@ class LocationAdmin(admin.ModelAdmin):
         ("Campsite", {"fields": ("name", "province", "category", "description",
                                  "latitude", "longitude", "terrain_type", "elevation_m",
                                  "site_capacity")}),
+        ("Photo", {"fields": ("cover_image", "photo_preview", "cover_image_credit"),
+                   "description": "Use your own photos, or openly licensed ones (e.g. Wikimedia "
+                                  "Commons) and fill in the credit."}),
         ("Facilities", {"fields": ("has_water_source", "has_restrooms", "fire_pit_allowed")}),
         ("Permits & rules", {"fields": ("authority", "permit_status", "permit_details",
                                         "permit_booking_url", "rules", "permit_info_source",
                                         "permit_info_verified_at")}),
         ("Ratings", {"fields": ("avg_rating", "review_count", "created_at", "updated_at")}),
     )
+
+    @admin.display(description="Preview")
+    def photo_preview(self, obj):
+        if not obj.cover_image:
+            return "No photo yet — the app shows an illustration."
+        return format_html('<img src="{}" style="max-width:360px;border-radius:8px">', obj.cover_image.url)
+
+    @admin.display(boolean=True, description="Photo")
+    def has_photo(self, obj):
+        return bool(obj.cover_image)
 
     @admin.action(description="Approve selected submissions (publish)")
     def approve_selected(self, request, queryset):

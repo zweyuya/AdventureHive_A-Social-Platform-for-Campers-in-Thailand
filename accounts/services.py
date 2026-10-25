@@ -24,13 +24,15 @@ def delete_account(user: User) -> None:
     Their active RSVPs are cancelled (waitlisted people are promoted into the
     freed seats) and upcoming trips they organise are cancelled with notices.
     They leave all groups; a sole group admin is succeeded by the longest-standing
-    co-admin (or member).
+    co-admin (or member). Their posts (with photos), comments and reactions are deleted.
     """
     from communities.services import withdraw_user as leave_groups  # local imports
+    from social.services import withdraw_user as remove_posts
     from trips.services import withdraw_user as leave_trips          # avoid cycles
 
     leave_trips(user)
     leave_groups(user)
+    remove_posts(user)  # their posts, photos, comments and reactions
     user = User.objects.select_for_update().get(pk=user.pk)
     now = timezone.now()
 
@@ -47,6 +49,8 @@ def delete_account(user: User) -> None:
 
     profile = getattr(user, "profile", None)
     if profile is not None:
+        if profile.avatar:
+            profile.avatar.delete(save=False)  # PDPA: the photo file is erased too
         profile.display_name = "Deleted user"
         profile.bio = ""
         profile.date_of_birth = None

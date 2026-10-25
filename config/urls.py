@@ -1,3 +1,5 @@
+from django.conf import settings
+from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import include, path
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
@@ -27,4 +29,12 @@ urlpatterns = [
     # Layer 5 — verified reviews & Q&A forum
     path("api/", include("reviews.urls")),
     path("api/", include("qa.urls")),
+    path("api/", include("notifications.urls")),
+    # Newsfeed — group & trip posts, comments, reactions
+    path("api/", include("social.urls")),
 ]
+
+# Uploaded photos. In development Django serves them; in production the web server
+# (nginx) serves MEDIA_ROOT at /media/ instead.
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

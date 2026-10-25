@@ -85,13 +85,17 @@ class PublicProfileSerializer(serializers.ModelSerializer):
     """What anyone may see. No email, phone, birth date or gender."""
 
     id = serializers.IntegerField(source="user_id", read_only=True)
+    avatar = serializers.SerializerMethodField()
+
+    def get_avatar(self, obj) -> str | None:
+        return obj.avatar.url if obj.avatar else None
     interest_tags = InterestTagSerializer(many=True, read_only=True)
     member_since = serializers.DateTimeField(source="user.created_at", read_only=True)
 
     class Meta:
         model = Profile
         fields = [
-            "id", "display_name", "bio", "city",
+            "id", "display_name", "avatar", "bio", "city",
             "camping_experience_level", "interest_tags", "member_since",
         ]
 
@@ -103,6 +107,7 @@ class PrivateProfileSerializer(serializers.ModelSerializer):
     """
 
     id = serializers.IntegerField(source="user_id", read_only=True)
+    avatar = serializers.SerializerMethodField()
     email = serializers.EmailField(source="user.email", read_only=True)
     status = serializers.CharField(source="user.status", read_only=True)
     pdpa_consent_at = serializers.DateTimeField(source="user.pdpa_consent_at", read_only=True)
@@ -119,9 +124,12 @@ class PrivateProfileSerializer(serializers.ModelSerializer):
         model = Profile
         fields = [
             "id", "email", "status", "pdpa_consent_at", "phone",
-            "display_name", "bio", "date_of_birth", "gender", "city",
+            "display_name", "avatar", "bio", "date_of_birth", "gender", "city",
             "camping_experience_level", "interest_tags", "interest_tag_ids",
         ]
+
+    def get_avatar(self, obj) -> str | None:
+        return obj.avatar.url if obj.avatar else None
 
     def validate_phone(self, value):
         value = value or None
@@ -165,3 +173,7 @@ class AccountDeleteSerializer(serializers.Serializer):
         write_only=True, style={"input_type": "password"},
         help_text="Current password, to confirm deletion.",
     )
+
+
+class AvatarUploadSerializer(serializers.Serializer):
+    avatar = serializers.FileField(help_text="JPEG, PNG or WebP, max 5 MB.")

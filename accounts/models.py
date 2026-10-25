@@ -112,6 +112,8 @@ class Profile(models.Model):
     camping_experience_level = models.CharField(
         max_length=20, choices=ExperienceLevel.choices, default=ExperienceLevel.BEGINNER
     )
+    # 400×400 JPEG produced by accounts.images.process_avatar (metadata stripped)
+    avatar = models.ImageField(upload_to="avatars/", blank=True)
     interest_tags = models.ManyToManyField(
         InterestTag, blank=True, related_name="profiles", db_table="profile_interest_tags"
     )

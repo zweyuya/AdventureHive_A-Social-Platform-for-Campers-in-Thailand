@@ -13,6 +13,7 @@ auth_urlpatterns = [
 
 users_urlpatterns = [
     path("me/", views.MeView.as_view(), name="users-me"),
+    path("me/avatar/", views.AvatarView.as_view(), name="users-me-avatar"),
     path("<int:pk>/", views.UserProfileView.as_view(), name="users-detail"),
     path("<int:pk>/emergency-contact/", views.EmergencyContactView.as_view(),
          name="users-emergency-contact"),

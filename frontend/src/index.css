@@ -1,0 +1,27 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  h1, h2, h3 { @apply text-navy-900 tracking-tight; }
+  :focus-visible { @apply outline-none ring-2 ring-sunrise-500 ring-offset-2; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+}
+
+@layer components {
+  .btn { @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50; }
+  .btn-primary { @apply btn bg-forest-700 text-white hover:bg-forest-800; }
+  .btn-outline { @apply btn border border-forest-600 text-forest-700 hover:bg-forest-50; }
+  .btn-ghost { @apply btn text-ink/70 hover:bg-forest-50 hover:text-forest-800; }
+  .btn-danger { @apply btn border border-red-300 text-red-700 hover:bg-red-50; }
+  .btn-sm { @apply px-3 py-1.5 text-xs; }
+  .input { @apply w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm placeholder:text-slate-400 focus:border-forest-600 focus:ring-2 focus:ring-forest-100 focus:outline-none; }
+  .label { @apply mb-1 block text-sm font-medium text-ink; }
+  .card { @apply rounded-xl border border-slate-200/80 bg-white shadow-card; }
+  .chip { @apply inline-flex items-center rounded-full border border-forest-600/40 px-3 py-1 text-sm text-forest-800 transition-colors hover:bg-forest-50; }
+  .chip-on { @apply border-forest-700 bg-forest-700 text-white hover:bg-forest-800; }
+  .link { @apply font-semibold text-forest-700 hover:text-forest-900 hover:underline; }
+}
+
+.leaflet-container { font-family: inherit; }
+.leaflet-popup-content-wrapper { border-radius: 12px; }

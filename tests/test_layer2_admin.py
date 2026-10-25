@@ -66,7 +66,7 @@ def test_admin_edit_of_published_campsite_creates_new_version(admin_client, pend
     approve_submission(pending, admin_client.admin)
     url = f"/admin/locations/location/{pending.pk}/change/"
     form = admin_client.get(url).context["adminform"].form
-    data = {k: v for k, v in form.initial.items() if v is not None}
+    data = {k: v for k, v in form.initial.items() if v is not None and k != "cover_image"}
     data.update({
         "rules": "Quiet hours 22:00–06:00",
         "authority": "", "permit_info_verified_at_0": "", "permit_info_verified_at_1": "",

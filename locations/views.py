@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from django_filters.rest_framework import DjangoFilterBackend
@@ -208,7 +209,7 @@ class CampsiteMapView(APIView):
     def get(self, request):
         qs = CampsiteFilter(request.GET, queryset=Location.objects.published()).qs
         rows = qs.values("id", "name", "category", "province", "avg_rating",
-                         "latitude", "longitude")
+                         "latitude", "longitude", "cover_image")
         features = [
             {
                 "type": "Feature",
@@ -218,6 +219,7 @@ class CampsiteMapView(APIView):
                     "id": r["id"], "name": r["name"], "category": r["category"],
                     "province": r["province"],
                     "avg_rating": float(r["avg_rating"]) if r["avg_rating"] is not None else None,
+                    "cover_image": f"{settings.MEDIA_URL_ABS}{r['cover_image']}" if r["cover_image"] else None,
                 },
             }
             for r in rows
