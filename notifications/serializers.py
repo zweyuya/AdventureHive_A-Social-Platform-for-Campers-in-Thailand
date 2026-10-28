@@ -10,6 +10,8 @@ MESSAGES = {
     T.TRIP_UPDATED: "{trip} has new dates or a new meeting point.",
     T.TRIP_REMINDER: "{trip} is over — please record who attended.",
     T.REVIEW_UNLOCKED: "Thanks for coming on {trip}! You can now review the campsite.",
+    T.EMERGENCY_CONTACT_VIEWED: "{actor} (organizer of {trip}) opened the emergency contact "
+                                "you shared.",
     T.SUBMISSION_APPROVED: "Your campsite change for {location} was approved.",
     T.SUBMISSION_REJECTED: "Your campsite change for {location} needs changes.",
     T.ANSWER_POSTED: "Someone answered your question: {question}",

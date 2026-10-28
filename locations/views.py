@@ -2,13 +2,16 @@ from django.conf import settings
 from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from django_filters.rest_framework import DjangoFilterBackend
-from drf_spectacular.utils import extend_schema, inline_serializer
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import OpenApiParameter, extend_schema, inline_serializer
 from rest_framework import filters, mixins, permissions, serializers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 from rest_framework.views import APIView
+
+from core.provinces import check_pin
 
 from . import services
 from .filters import CampsiteFilter
@@ -17,6 +20,7 @@ from .serializers import (
     CampsiteDetailSerializer,
     CampsiteListSerializer,
     CampsiteWriteSerializer,
+    PinCheckSerializer,
     RejectSerializer,
     RevisionSerializer,
     SuggestEditSerializer,
@@ -45,6 +49,7 @@ class CampsiteViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
     submit              — the submitter: draft/rejected → pending_review
     approve / reject    — staff: pending_review → published / rejected (note required)
     mine                — the member's own submissions with their status
+    pin-check           — members: province / inside-Thailand / nearby campsites for a map pin
     revisions (POST)    — suggest an edit to a published campsite (pending until approved)
     history             — approved versions of a campsite
     """
@@ -141,6 +146,36 @@ class CampsiteViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
         qs = Location.objects.filter(created_by=request.user).order_by("-created_at")
         data = CampsiteDetailSerializer(qs, many=True, context={"request": request}).data
         return Response(data)
+
+    @extend_schema(
+        parameters=[
+            OpenApiParameter("lat", OpenApiTypes.FLOAT, required=True),
+            OpenApiParameter("lng", OpenApiTypes.FLOAT, required=True),
+            OpenApiParameter("exclude", OpenApiTypes.INT,
+                             description="Campsite id to leave out of 'nearby' (the one being edited)"),
+        ],
+        responses=PinCheckSerializer,
+    )
+    @action(detail=False, methods=["get"], url_path="pin-check")
+    def pin_check(self, request):
+        """Where is this map pin? Province, inside Thailand or not, and campsites within 1 km."""
+        params = request.query_params
+        try:
+            lat, lng = float(params["lat"]), float(params["lng"])
+            exclude = int(params["exclude"]) if params.get("exclude") else None
+        except (KeyError, ValueError):
+            raise ValidationError({"detail": "Give numeric lat and lng (and exclude, if used)."})
+        if not (-90 <= lat <= 90 and -180 <= lng <= 180):
+            raise ValidationError({"detail": "lat/lng out of range."})
+        pin = check_pin(lat, lng)
+        nearby = services.nearby_campsites(lat, lng, queryset=Location.objects.published(),
+                                           exclude_id=exclude)
+        return Response(PinCheckSerializer({
+            "latitude": lat, "longitude": lng, "in_thailand": pin.in_thailand,
+            "country": pin.country, "province": pin.province, "provinces": sorted(pin.allowed),
+            "nearby": [{"id": loc.id, "name": loc.name, "province": loc.province,
+                        "distance_km": round(d, 2)} for loc, d in nearby],
+        }).data)
 
     @extend_schema(request=SuggestEditSerializer, responses={201: RevisionSerializer})
     @action(detail=True, methods=["post"])

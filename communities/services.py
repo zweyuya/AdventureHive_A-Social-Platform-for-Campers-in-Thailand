@@ -85,9 +85,24 @@ def update_group(group, user, data: dict) -> CampingGroup:
 
 @transaction.atomic
 def delete_group(group, user) -> None:
+    """
+    Trips keep existing (their group becomes NULL). For a PRIVATE group that would
+    make its trips public, so first: upcoming trips are cancelled (people are
+    notified) and every trip of the group becomes members-only (visible to its
+    organizer and participants only).
+    """
+    from trips import services as trip_services  # local import: trips depends on communities
+    from trips.models import Trip, TripStatus
+
     group = _lock(group)
     _require_role(group, user, (ROLE.ADMIN,), "delete the group")
-    group.delete()  # trips keep existing (group set to NULL)
+    if group.privacy_type == PrivacyType.PRIVATE:
+        upcoming = group.trips.filter(
+            status__in=[TripStatus.DRAFT, TripStatus.PUBLISHED, TripStatus.FULL])
+        for trip in upcoming:
+            trip_services.cancel_trip(trip, user)
+        Trip.objects.filter(group=group).update(members_only=True)
+    group.delete()
 
 
 # --------------------------------------------------------------------------

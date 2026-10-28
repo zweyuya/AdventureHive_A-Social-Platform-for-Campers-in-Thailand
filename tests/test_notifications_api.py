@@ -46,5 +46,5 @@ def test_seed_demo_runs_and_is_idempotent(api_client):
     call_command("seed_demo")
     call_command("seed_demo")
     assert api_client.get("/api/trips/").json()["count"] == 3
-    assert api_client.get("/api/reviews/").json()["count"] == 2
+    assert api_client.get("/api/reviews/").json()["count"] == 3  # one per badge type + 1
     assert api_client.get("/api/groups/").json()["count"] == 4

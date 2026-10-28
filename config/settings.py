@@ -133,6 +133,8 @@ REST_FRAMEWORK = {
         "anon": "60/min",
         "user": "300/min",
         "rsvp": "10/min",    # used by the RSVP endpoint (RSVP flooding mitigation)
+        "checkin": "5/min",  # trip check-in code guesses (a 6-digit code can't be brute-forced)
+        "report": "10/min",  # review reports
         "auth": "10/min",    # login / register
     },
 }

@@ -1,4 +1,4 @@
-import { AlertTriangle, ArrowLeft, BadgeCheck, Droplets, Flame, History, Mountain, Pencil, Share2, ShowerHead, TreePine, Users } from "lucide-react";
+import { AlertTriangle, ArrowLeft, BadgeCheck, Droplets, Flag, Flame, History, Mountain, Pencil, Share2, ShowerHead, TreePine, Users } from "lucide-react";
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import CampsiteImage from "../components/CampsiteImage";
@@ -123,7 +123,50 @@ export function WriteReview({ campsiteId, trips, onClose, onDone }) {
   );
 }
 
+const REPORT_REASONS = [
+  ["fake", "Looks fake / reviewer wasn't there"], ["misleading", "Wrong or misleading information"],
+  ["offensive", "Offensive or abusive"], ["spam", "Spam or advertising"], ["other", "Other"],
+];
+
+/** Report a review to the moderators (once per person). */
+function ReportReview({ review, onClose }) {
+  const [reason, setReason] = useState("misleading");
+  const [details, setDetails] = useState("");
+  const [error, setError] = useState(null);
+  const [done, setDone] = useState(false);
+  const submit = async (e) => {
+    e.preventDefault(); setError(null);
+    try { await api(`/reviews/${review.id}/report/`, { method: "POST", body: { reason, details } }); setDone(true); }
+    catch (err) { setError(err.status === 429 ? "Too many reports. Try again in a minute." : err); }
+  };
+  return (
+    <Modal title="Report this review" onClose={onClose}>
+      {done ? <>
+        <p className="text-sm text-ink/75">Thanks. A moderator will check this review. If it breaks the rules it will be hidden and removed from the rating.</p>
+        <button className="btn-primary mt-5 w-full" onClick={onClose}>Done</button>
+      </> : (
+        <form onSubmit={submit} className="space-y-4">
+          <Field label="What's wrong with it?">
+            <select className="input" value={reason} onChange={(e) => setReason(e.target.value)}>
+              {REPORT_REASONS.map(([v, t]) => <option key={v} value={v}>{t}</option>)}</select></Field>
+          <Field label="Details (optional)"><textarea className="input" rows={3} maxLength={2000} value={details} onChange={(e) => setDetails(e.target.value)} /></Field>
+          <ErrorNote error={error} />
+          <button className="btn-primary w-full">Send report</button>
+        </form>
+      )}
+    </Modal>
+  );
+}
+
+/**
+ * Badge shows how the reviewer's attendance was verified:
+ * checked in with the trip code + confirmed by the organizer, or organizer only.
+ */
 export function ReviewItem({ r }) {
+  const { user } = useAuth();
+  const [reporting, setReporting] = useState(false);
+  const checkedIn = r.verification === "check_in";
+  const visited = new Date(r.trip.start_datetime).toLocaleDateString("en-GB", { month: "short", year: "numeric" });
   return (
     <article className="border-b border-slate-100 py-4 last:border-0">
       <div className="flex items-start gap-3">
@@ -131,15 +174,23 @@ export function ReviewItem({ r }) {
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-semibold">{r.author.display_name}</span>
-            <span className="inline-flex items-center gap-1 rounded-full bg-forest-100 px-2 py-0.5 text-xs font-semibold text-forest-800">
-              <BadgeCheck size={13} /> Verified attendee</span>
+            <span title={checkedIn ? "Checked in with the trip code and confirmed by the organizer" : "Confirmed by the organizer (no check-in)"}
+                  className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${checkedIn ? "bg-forest-100 text-forest-800" : "bg-slate-100 text-slate-700"}`}>
+              <BadgeCheck size={13} /> {checkedIn ? "Verified attendee · checked in" : "Confirmed by organizer"}</span>
             <span className="ml-auto text-xs text-ink/50">{fmtDate(r.created_at)}{r.edited_at && " · edited"}</span>
           </div>
-          <p className="text-xs text-ink/55">{r.trip.title} · {fmtDate(r.trip.start_datetime)}</p>
+          <p className="text-xs text-ink/55">Visited {visited} · {r.trip.title}</p>
           <div className="mt-1"><Stars value={r.rating} size={15} /></div>
           {r.review_text && <p className="mt-1 text-sm text-ink/85">{r.review_text}</p>}
+          <div className="mt-1 flex flex-wrap items-center gap-3 text-xs">
+            {r.counts_in_rating === false && <span className="text-ink/50">Earlier visit: not counted in the rating (only this person's newest review counts)</span>}
+            {user && user.id !== r.author.id && (
+              <button onClick={() => setReporting(true)} className="ml-auto flex items-center gap-1 text-ink/45 hover:text-red-700"><Flag size={12} /> Report</button>
+            )}
+          </div>
         </div>
       </div>
+      {reporting && <ReportReview review={r} onClose={() => setReporting(false)} />}
     </article>
   );
 }
@@ -268,7 +319,7 @@ export default function CampsiteDetail() {
             {tab === "trips" && (openTrips.length ? (
               <ul className="space-y-3">{openTrips.map((t) => <TripRow key={t.id} t={t} />)}</ul>
             ) : <Empty title="No upcoming trips here" action={<Link to={`/trips/new?campsite=${c.id}`} className="btn-primary">Organise a trip</Link>} />)}
-            {tab === "reviews" && <ReviewList reviews={reviews} onWrite={() => setModal("review")} user={user} />}
+            {tab === "reviews" && <ReviewList reviews={reviews} onWrite={() => setModal("review")} user={user} c={c} />}
             {tab === "qa" && <QAPanel campsiteId={c.id} />}
             {tab === "map" && <MiniMap lat={c.latitude} lng={c.longitude} className="h-96" />}
             {tab === "history" && <HistoryPanel campsiteId={c.id} />}
@@ -311,16 +362,66 @@ function TripRow({ t, compact }) {
   );
 }
 
+/**
+ * "4.6 from 23 verified reviews" plus one bar per star level (5 → 1).
+ * Single series: one colour (sunrise-600, validated ≥ 3:1 on white), counts shown
+ * as text next to each bar, hover/focus shows the share. Same reviews as the
+ * average: published, newest review per person.
+ */
+function RatingBreakdown({ c, compact }) {
+  const counts = c.rating_breakdown || {};
+  const total = c.review_count || 0;
+  const max = Math.max(1, ...Object.values(counts));
+  if (!total) return null;
+  const from = `from ${total} verified review${total === 1 ? "" : "s"}`;
+  return (
+    <section className={`mb-4 rounded-xl border border-slate-200 p-4 ${compact ? "space-y-3" : "flex flex-col gap-4 sm:flex-row sm:items-center sm:gap-8"}`} aria-label="Rating breakdown">
+      {compact ? ( // narrow sidebar: summary on one line, bars below
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <span className="text-3xl font-extrabold text-navy-900">{Number(c.avg_rating).toFixed(1)}</span>
+          <Stars value={c.avg_rating} size={15} />
+          <span className="text-xs text-ink/60">{from}</span>
+        </div>
+      ) : (
+        <div className="shrink-0 text-center sm:w-36">
+          <p className="text-4xl font-extrabold text-navy-900">{Number(c.avg_rating).toFixed(1)}</p>
+          <div className="mt-1 flex justify-center"><Stars value={c.avg_rating} size={15} /></div>
+          <p className="mt-1 text-xs text-ink/60">{from}</p>
+        </div>
+      )}
+      <ul className="flex-1 space-y-1.5">
+        {[5, 4, 3, 2, 1].map((star) => {
+          const n = counts[star] ?? 0;
+          const pct = Math.round((n / total) * 100);
+          return (
+            <li key={star} tabIndex={0} className="group relative flex items-center gap-3 rounded text-sm outline-none focus-visible:ring-2 focus-visible:ring-forest-500"
+                aria-label={`${star} star: ${n} review${n === 1 ? "" : "s"} (${pct}%)`}>
+              <span className="w-8 shrink-0 text-ink/70">{star} ★</span>
+              <span className="h-2.5 flex-1 rounded bg-slate-100">
+                {n > 0 && <span className="block h-full rounded bg-sunrise-600" style={{ width: `${(n / max) * 100}%` }} />}
+              </span>
+              <span className="w-8 shrink-0 text-right tabular-nums text-ink/70">{n}</span>
+              <span role="tooltip" className="pointer-events-none absolute -top-8 left-1/2 z-10 hidden -translate-x-1/2 whitespace-nowrap rounded-md bg-navy-900 px-2 py-1 text-xs text-white shadow group-hover:block group-focus-visible:block">
+                {star} ★ · {n} review{n === 1 ? "" : "s"} · {pct}%
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
 function ReviewList({ reviews, onWrite, user, compact, c }) {
   const items = results(reviews.data);
   return (
     <div>
       <div className="mb-2 flex items-center justify-between gap-3">
-        <h2 className="text-lg font-bold">Reviews {compact && c?.avg_rating && <span className="ml-1 text-sm font-semibold text-ink/70">
-          <Stars value={c.avg_rating} size={14} /> {Number(c.avg_rating).toFixed(1)}</span>}</h2>
+        <h2 className="text-lg font-bold">Reviews</h2>
         {user && <button onClick={onWrite} className="btn-primary btn-sm">Write a review</button>}
       </div>
-      <p className="text-xs text-ink/55">Only campers the trip organizer marked as attended can review.</p>
+      {c && <RatingBreakdown c={c} compact={compact} />}
+      <p className="text-xs text-ink/55">Only campers who attended a trip here can review. Each person counts once in the rating (their newest review).</p>
       {reviews.loading && <Spinner />}
       {!reviews.loading && items.length === 0 && <p className="mt-3 text-sm text-ink/60">No reviews yet.</p>}
       {(compact ? items.slice(0, 3) : items).map((r) => <ReviewItem key={r.id} r={r} />)}

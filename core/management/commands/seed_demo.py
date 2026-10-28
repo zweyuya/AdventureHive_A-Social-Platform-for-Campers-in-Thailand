@@ -6,7 +6,8 @@ Demo data for screenshots and the progress presentation.
 
 Creates clearly fake accounts (@demo.adventurehive.test, password: DemoCamp123!),
 groups, upcoming trips with RSVPs and a waitlist, one completed trip with attendance
-and verified reviews, and a few Q&A threads. Everything goes through the same
+and verified reviews (both badge types), one trip that ended 2 hours ago for a live
+check-in + attendance demo, and a few Q&A threads. Everything goes through the same
 service functions as the API, so all business rules still apply.
 Safe to re-run: it does nothing if the demo users already exist.
 """
@@ -24,7 +25,8 @@ from qa import services as qa
 from qa.models import Question
 from reviews import services as reviews
 from trips import services as trips
-from trips.models import Trip, TripEquipmentItem, TripStatus
+from trips.management.commands.demo_checkin_trip import create_checkin_demo_trip
+from trips.models import Trip, TripEquipmentItem, TripParticipant, TripStatus
 
 PASSWORD = "DemoCamp123!"
 DOMAIN = "demo.adventurehive.test"
@@ -134,14 +136,24 @@ class Command(BaseCommand):
                                                end_datetime=now - timedelta(days=4))
         trips.complete_finished_trips()
         past.refresh_from_db()
+        # Nok and Mint checked in with the trip code; Tono's phone died, so Ploy
+        # confirms him with a reason (shows the weaker "Confirmed by organizer" badge).
+        TripParticipant.objects.filter(trip=past, user__in=[u["Nok"], u["Mint"]]).update(
+            checked_in_at=past.start_datetime + timedelta(minutes=20))
         trips.mark_attendance(past, u["Ploy"], [
             {"user_id": u["Nok"].pk, "status": "attended"},
             {"user_id": u["Mint"].pk, "status": "attended"},
-            {"user_id": u["Tono"].pk, "status": "attended"},
+            {"user_id": u["Tono"].pk, "status": "attended",
+             "reason": "His phone battery died; he camped with us both nights."},
             {"user_id": u["Jee"].pk, "status": "no_show"},
         ])
         reviews.create_review(u["Nok"], past, 5, "Incredible sunrise and a very well organised trip.")
         reviews.create_review(u["Mint"], past, 4, "Clean restrooms, a bit windy at night.")
+        reviews.create_review(u["Tono"], past, 4, "Great cliff views. Bring a power bank!")
+
+        # ---- a trip that ended 2 hours ago: live check-in + attendance demo -------------
+        # (re-create a fresh one on presentation day: python manage.py demo_checkin_trip)
+        create_checkin_demo_trip()
 
         # ---- Q&A -------------------------------------------------------------------------
         q1 = Question.objects.create(author=u["June"], location=khao_yai,

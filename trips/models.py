@@ -1,3 +1,5 @@
+import secrets
+
 from django.conf import settings
 from django.db import models
 from django.db.models import F, Q
@@ -37,6 +39,26 @@ class ParticipantStatus(models.TextChoices):
     CANCELLED = "cancelled", "Cancelled"
     ATTENDED = "attended", "Attended"   # set by the organizer after the trip
     NO_SHOW = "no_show", "No-show"      # set by the organizer after the trip
+
+
+class VerificationMethod(models.TextChoices):
+    """How an 'attended' record was verified (shown on the review as a badge)."""
+
+    CHECK_IN = "check_in", "Checked in with the trip code"
+    ORGANIZER_ONLY = "organizer_only", "Confirmed by the organizer only"
+
+
+class FlagStatus(models.TextChoices):
+    """Admin review of trips whose attendance looks suspicious."""
+
+    NONE = "", "Not flagged"
+    NEEDS_REVIEW = "needs_review", "Needs admin review"  # set automatically (many overrides)
+    REVIEWS_HIDDEN = "reviews_hidden", "Suspicious: reviews hidden"  # set by an admin
+    CLEARED = "cleared", "Checked by admin: OK"
+
+
+def new_checkin_salt():
+    return secrets.token_hex(8)
 
 
 class Trip(TimeStampedModel):
@@ -82,6 +104,20 @@ class Trip(TimeStampedModel):
     # transaction; the CHECK below makes overbooking impossible at the DB level
     # even if application code has a bug.
     confirmed_count = models.PositiveIntegerField(default=0)
+
+    # Check-in code: derived from this salt + SECRET_KEY (see services.checkin_code),
+    # so the code itself is never stored. A new salt = a new code.
+    checkin_salt = models.CharField(max_length=32, default=new_checkin_salt, editable=False)
+
+    # Suspicious-attendance review (rule: too many attended without check-in).
+    flag_status = models.CharField(max_length=20, choices=FlagStatus.choices, blank=True,
+                                   default=FlagStatus.NONE)
+    flag_note = models.TextField(blank=True)
+    flagged_at = models.DateTimeField(null=True, blank=True)
+
+    # Set when the trip's PRIVATE group is deleted: the trip then has no group to
+    # decide who may see it, so only its organizer and participants still can.
+    members_only = models.BooleanField(default=False)
 
     class Meta:
         db_table = "trips"
@@ -158,6 +194,17 @@ class TripParticipant(models.Model):
     )
     attendance_marked_at = models.DateTimeField(null=True, blank=True)
 
+    # Two-sided attendance: the participant checks in with the organizer's code,
+    # the organizer confirms. Without a check-in the organizer must give a reason.
+    checked_in_at = models.DateTimeField(null=True, blank=True)
+    verification_method = models.CharField(max_length=20, choices=VerificationMethod.choices,
+                                           blank=True, default="")
+    override_reason = models.TextField(blank=True)
+
+    # Opt-in: let the organizer read my (encrypted) emergency contact, only around
+    # the trip dates. Off by default; the participant can turn it off any time.
+    share_emergency_contact = models.BooleanField(default=False)
+
     class Meta:
         db_table = "trip_participants"
         ordering = ["trip", "waitlist_position", "joined_at"]
@@ -188,7 +235,42 @@ class TripParticipant(models.Model):
                 condition=~Q(status__in=[ParticipantStatus.ATTENDED, ParticipantStatus.NO_SHOW])
                 | Q(attendance_marked_at__isnull=False),
             ),
+            # Every 'attended' row says how it was verified; nobody else has a method.
+            models.CheckConstraint(
+                name="trip_participants_attended_has_verification",
+                condition=(Q(status=ParticipantStatus.ATTENDED) & ~Q(verification_method=""))
+                | (~Q(status=ParticipantStatus.ATTENDED) & Q(verification_method="")),
+            ),
+            # 'check_in' needs a real check-in; 'organizer_only' needs a written reason.
+            models.CheckConstraint(
+                name="trip_participants_verification_evidence",
+                condition=(~Q(verification_method=VerificationMethod.CHECK_IN)
+                           | Q(checked_in_at__isnull=False))
+                & (~Q(verification_method=VerificationMethod.ORGANIZER_ONLY)
+                   | ~Q(override_reason="")),
+            ),
         ]
 
     def __str__(self):
         return f"{self.user} → {self.trip} ({self.status})"
+
+
+class EmergencyContactAccess(models.Model):
+    """Audit log: every time an organizer opened a participant's shared emergency contact."""
+
+    trip = models.ForeignKey(Trip, on_delete=models.CASCADE, related_name="emergency_accesses")
+    organizer = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL, related_name="+"
+    )
+    participant = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="+"
+    )
+    accessed_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "emergency_contact_accesses"
+        ordering = ["-accessed_at"]
+        indexes = [models.Index(fields=["trip", "participant"])]
+
+    def __str__(self):
+        return f"Trip {self.trip_id}: organizer {self.organizer_id} viewed user {self.participant_id}"

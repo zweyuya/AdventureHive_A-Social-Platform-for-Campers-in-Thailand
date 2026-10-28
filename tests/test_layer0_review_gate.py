@@ -10,9 +10,18 @@ from trips.models import TripParticipant, TripStatus
 
 
 def _participant(trip, user, status):
-    marked = timezone.now() if status in (PS.ATTENDED, PS.NO_SHOW) else None
-    return TripParticipant.objects.create(trip=trip, user=user, status=status,
-                                          attendance_marked_at=marked)
+    """Rows start as confirmed (the DB only allows an RSVP to create confirmed/waitlisted),
+    then move to the wanted status the way the attendance code does."""
+    p = TripParticipant.objects.create(trip=trip, user=user, status=PS.CONFIRMED)
+    if status != PS.CONFIRMED:
+        p.status = status
+        if status in (PS.ATTENDED, PS.NO_SHOW):
+            p.attendance_marked_at = timezone.now()
+        if status == PS.ATTENDED:
+            p.checked_in_at = timezone.now()
+            p.verification_method = "check_in"
+        p.save()
+    return p
 
 
 def _rejected(**kwargs):

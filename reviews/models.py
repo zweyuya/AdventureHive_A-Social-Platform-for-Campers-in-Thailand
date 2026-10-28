@@ -18,6 +18,12 @@ class ReviewStatus(models.TextChoices):
     HIDDEN = "hidden", "Hidden"  # hidden by a moderator after a report
 
 
+class HiddenReason(models.TextChoices):
+    NONE = "", "—"
+    MODERATOR = "moderator", "Hidden by a moderator"
+    TRIP_FLAGGED = "trip_flagged", "Trip flagged as suspicious"
+
+
 class Review(models.Model):
     location = models.ForeignKey(
         "locations.Location", on_delete=models.CASCADE, related_name="reviews"
@@ -31,6 +37,9 @@ class Review(models.Model):
     status = models.CharField(
         max_length=10, choices=ReviewStatus.choices, default=ReviewStatus.PUBLISHED
     )
+    # Why it is hidden, so un-flagging a trip restores only the reviews the flag hid.
+    hidden_reason = models.CharField(max_length=20, choices=HiddenReason.choices, blank=True,
+                                     default=HiddenReason.NONE)
     created_at = models.DateTimeField(auto_now_add=True)
     edited_at = models.DateTimeField(null=True, blank=True)  # versioning: current + "edited" marker
 
@@ -47,3 +56,47 @@ class Review(models.Model):
 
     def __str__(self):
         return f"{self.rating}★ {self.location} by {self.user}"
+
+
+class ReportReason(models.TextChoices):
+    FAKE = "fake", "Looks fake / reviewer wasn't there"
+    MISLEADING = "misleading", "Wrong or misleading information"
+    OFFENSIVE = "offensive", "Offensive or abusive"
+    SPAM = "spam", "Spam or advertising"
+    OTHER = "other", "Other"
+
+
+class ReportStatus(models.TextChoices):
+    OPEN = "open", "Open"
+    ACTIONED = "actioned", "Review hidden"
+    DISMISSED = "dismissed", "Dismissed"
+
+
+class ReviewReport(models.Model):
+    """A member reports a review; a moderator hides the review or dismisses the report."""
+
+    review = models.ForeignKey(Review, on_delete=models.CASCADE, related_name="reports")
+    reporter = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="review_reports"
+    )
+    reason = models.CharField(max_length=20, choices=ReportReason.choices)
+    details = models.TextField(blank=True)
+    status = models.CharField(max_length=10, choices=ReportStatus.choices,
+                              default=ReportStatus.OPEN)
+    resolved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+"
+    )
+    resolved_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "review_reports"
+        ordering = ["-created_at"]
+        indexes = [models.Index(fields=["status", "created_at"])]
+        constraints = [
+            # One report per person per review (no report-spamming).
+            models.UniqueConstraint(fields=["review", "reporter"], name="review_reports_once"),
+        ]
+
+    def __str__(self):
+        return f"Report on review {self.review_id} ({self.get_reason_display()})"

@@ -5,12 +5,19 @@ from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 
 from locations.models import Location
 
 from . import services
 from .models import Review, ReviewStatus
-from .serializers import ReviewCreateSerializer, ReviewSerializer, ReviewUpdateSerializer
+from .serializers import (
+    ReviewCreateSerializer,
+    ReviewReportSerializer,
+    ReviewSerializer,
+    ReviewUpdateSerializer,
+    with_badges,
+)
 
 
 class ReviewPagination(PageNumberPagination):
@@ -27,6 +34,7 @@ class ReviewViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Cre
     update   — author (within the review window)
     destroy  — author
     hide / restore — moderators
+    report   — members: report someone else's review to the moderators
     mine     — my reviews
     """
 
@@ -34,7 +42,8 @@ class ReviewViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Cre
     pagination_class = ReviewPagination
 
     def get_queryset(self):
-        qs = Review.objects.select_related("user__profile", "trip", "location").order_by("-created_at")
+        qs = with_badges(Review.objects.select_related("user__profile", "trip", "location")) \
+            .order_by("-created_at")
         user = self.request.user
         if self.action == "list":
             return qs.filter(status=ReviewStatus.PUBLISHED, location__status="published")
@@ -51,7 +60,15 @@ class ReviewViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Cre
             return [permissions.IsAdminUser()]
         return [permissions.IsAuthenticated()]
 
+    def get_throttles(self):
+        if self.action == "report":  # report-spamming protection
+            self.throttle_scope = "report"
+            return [ScopedRateThrottle()]
+        return super().get_throttles()
+
     def get_serializer_class(self):
+        if self.action == "report":
+            return ReviewReportSerializer
         if self.action == "create":
             return ReviewCreateSerializer
         if self.action in ("update", "partial_update"):
@@ -96,6 +113,18 @@ class ReviewViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Cre
         review = services.set_review_status(self.get_object(), ReviewStatus.PUBLISHED)
         return Response(ReviewSerializer(review).data)
 
+    @extend_schema(request=ReviewReportSerializer, responses={201: None})
+    @action(detail=True, methods=["post"])
+    def report(self, request, pk=None):
+        """Report a published review (once per person). A moderator hides it or dismisses it."""
+        review = self.get_object()
+        serializer = ReviewReportSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        services.report_review(review, request.user, serializer.validated_data["reason"],
+                               serializer.validated_data.get("details", ""))
+        return Response({"detail": "Thanks. A moderator will look at this review."},
+                        status=status.HTTP_201_CREATED)
+
     @extend_schema(responses=ReviewSerializer(many=True))
     @action(detail=False, methods=["get"])
     def mine(self, request):
@@ -118,5 +147,5 @@ class CampsiteReviewListView(generics.ListAPIView):
         if getattr(self, "swagger_fake_view", False):
             return Review.objects.none()
         location = get_object_or_404(Location.objects.published(), pk=self.kwargs["location_pk"])
-        return Review.objects.filter(location=location, status=ReviewStatus.PUBLISHED) \
+        return with_badges(Review.objects.filter(location=location, status=ReviewStatus.PUBLISHED)) \
             .select_related("user__profile", "trip").order_by("-created_at")

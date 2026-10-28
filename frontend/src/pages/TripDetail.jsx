@@ -1,8 +1,8 @@
-import { ArrowLeft, Calendar, Check, Clock, Footprints, Gauge, Lock, MapPin, Mountain, Pencil, Route, Share2, ShieldAlert, Tent, Trash2, UserCheck, Users, X } from "lucide-react";
+import { ArrowLeft, Calendar, Check, Clock, Footprints, Gauge, KeyRound, LifeBuoy, Lock, MapPin, Mountain, Pencil, Route, Share2, ShieldAlert, Tent, Trash2, UserCheck, Users, X } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import CampsiteImage from "../components/CampsiteImage";
-import { MiniMap, meetIcon } from "../components/maps";
+import { PinsMap, campIcon, meetIcon } from "../components/maps";
 import { Avatar, ErrorNote, Modal, Spinner, StatusBadge } from "../components/ui";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
@@ -66,38 +66,162 @@ function JoinCard({ trip, user, onChange }) {
   );
 }
 
+/**
+ * Organizer records attendance. People who checked in with the trip code are
+ * pre-marked "attended". Marking someone attended who did NOT check in needs a
+ * reason (forgot, phone died…); their review then shows "Confirmed by organizer".
+ */
 function Attendance({ trip, participants, onDone }) {
   const confirmed = participants.filter((p) => ["confirmed", "attended", "no_show"].includes(p.status));
-  const [marks, setMarks] = useState(Object.fromEntries(confirmed.map((p) => [p.user_id, p.status === "no_show" ? "no_show" : "attended"])));
+  const initial = (p) => (p.status === "confirmed" ? (p.checked_in_at ? "attended" : "no_show") : p.status);
+  const [marks, setMarks] = useState(Object.fromEntries(confirmed.map((p) => [p.user_id, initial(p)])));
+  const [reasons, setReasons] = useState(Object.fromEntries(confirmed.map((p) => [p.user_id, p.override_reason || ""])));
   const [error, setError] = useState(null);
   const [saved, setSaved] = useState(false);
+  const needsReason = (p) => marks[p.user_id] === "attended" && !p.checked_in_at;
   const save = async () => {
     setError(null);
+    if (confirmed.some((p) => needsReason(p) && !reasons[p.user_id].trim()))
+      return setError("Give a reason for everyone marked attended who did not check in.");
     try {
-      await api(`/trips/${trip.id}/attendance/`, { method: "POST", body: { records: Object.entries(marks).map(([user_id, status]) => ({ user_id: Number(user_id), status })) } });
+      await api(`/trips/${trip.id}/attendance/`, { method: "POST", body: { records: confirmed.map((p) => ({
+        user_id: p.user_id, status: marks[p.user_id], ...(needsReason(p) ? { reason: reasons[p.user_id].trim() } : {}) })) } });
       setSaved(true); onDone();
     } catch (err) { setError(err); }
   };
   if (!confirmed.length) return <p className="text-sm text-ink/60">Nobody was confirmed for this trip.</p>;
   return (
     <div>
-      <p className="mb-3 text-sm text-ink/65">Mark who actually came. Only people marked as attended can review the campsite. You have 7 days after the trip ends.</p>
+      <p className="mb-3 text-sm text-ink/65">Mark who actually came. People who checked in with your trip code are pre-selected. Only people marked as attended can review the campsite. You have 7 days after the trip ends.</p>
       <ul className="divide-y divide-slate-100">
         {confirmed.map((p) => (
-          <li key={p.user_id} className="flex items-center gap-3 py-2">
-            <Avatar name={p.display_name} id={p.user_id} src={p.avatar} size="h-8 w-8 text-xs" />
-            <span className="flex-1 text-sm font-medium">{p.display_name}</span>
-            {["attended", "no_show"].map((s) => (
-              <button key={s} onClick={() => setMarks({ ...marks, [p.user_id]: s })} aria-pressed={marks[p.user_id] === s}
-                      className={`btn-sm rounded-lg border ${marks[p.user_id] === s ? (s === "attended" ? "border-forest-700 bg-forest-700 text-white" : "border-slate-600 bg-slate-600 text-white") : "border-slate-300"}`}>
-                {s === "attended" ? "Attended" : "No-show"}
-              </button>
-            ))}
+          <li key={p.user_id} className="py-2">
+            <div className="flex items-center gap-3">
+              <Avatar name={p.display_name} id={p.user_id} src={p.avatar} size="h-8 w-8 text-xs" />
+              <span className="flex-1 text-sm font-medium">{p.display_name}
+                <span className={`block text-xs font-normal ${p.checked_in_at ? "text-forest-700" : "text-ink/50"}`}>
+                  {p.checked_in_at ? `✓ Checked in ${fmtTime(p.checked_in_at)}` : "Did not check in"}</span></span>
+              {["attended", "no_show"].map((st) => (
+                <button key={st} onClick={() => setMarks({ ...marks, [p.user_id]: st })} aria-pressed={marks[p.user_id] === st}
+                        className={`btn-sm rounded-lg border ${marks[p.user_id] === st ? (st === "attended" ? "border-forest-700 bg-forest-700 text-white" : "border-slate-600 bg-slate-600 text-white") : "border-slate-300"}`}>
+                  {st === "attended" ? "Attended" : "No-show"}
+                </button>
+              ))}
+            </div>
+            {needsReason(p) && (
+              <input className="input mt-2 text-sm" maxLength={500} placeholder="Why mark them attended without a check-in? e.g. phone battery died"
+                     value={reasons[p.user_id]} onChange={(e) => setReasons({ ...reasons, [p.user_id]: e.target.value })} />
+            )}
           </li>
         ))}
       </ul>
       <ErrorNote error={error} className="mt-3" />
       <button onClick={save} className="btn-primary mt-3 w-full"><UserCheck size={16} /> {saved ? "Attendance saved" : "Save attendance"}</button>
+    </div>
+  );
+}
+
+/**
+ * Check-in, open from 2 h before the start until 24 h after the end.
+ * Organizer: shows the 6-digit code. Confirmed participant: enters it.
+ */
+function CheckInCard({ trip, isOrganizer, onChange }) {
+  const c = trip.checkin;
+  const code = useApi(isOrganizer && c?.is_open ? `/trips/${trip.id}/check-in-code/` : null);
+  const [value, setValue] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const canCheckIn = ["confirmed", "attended", "no_show"].includes(trip.my_status);
+  if (!c?.is_open || (!isOrganizer && !canCheckIn)) return null;
+  const submit = async (e) => {
+    e.preventDefault(); setBusy(true); setError(null);
+    try { await api(`/trips/${trip.id}/check-in/`, { method: "POST", body: { code: value } }); await onChange(); }
+    catch (err) { setError(err.status === 429 ? "Too many tries. Wait a minute and ask the organizer for the code." : err); }
+    finally { setBusy(false); }
+  };
+  return (
+    <section className="card border-sunrise-400 p-5">
+      <h2 className="mb-1 flex items-center gap-2 font-bold"><KeyRound size={18} className="text-sunrise-600" /> Trip check-in</h2>
+      <p className="mb-3 text-xs text-ink/60">Open until {fmtDate(c.closes_at)}, {fmtTime(c.closes_at)}</p>
+      {isOrganizer ? (
+        code.data ? <>
+          <p className="text-center font-mono text-4xl font-extrabold tracking-[0.3em] text-navy-900">{code.data.code}</p>
+          <p className="mt-3 text-sm text-ink/65">Show this code to your group at the meeting point or during the trip. Each person enters it in their app to prove they came.</p>
+        </> : <Spinner />
+      ) : c.my_checked_in_at ? (
+        <p className="flex items-center gap-2 font-semibold text-forest-800"><Check size={18} /> You checked in at {fmtTime(c.my_checked_in_at)}</p>
+      ) : (
+        <form onSubmit={submit} className="space-y-2">
+          <p className="text-sm text-ink/65">Enter the 6-digit code from the organizer. No signal at the campsite? You can enter it until 24 hours after the trip ends.</p>
+          <input className="input text-center font-mono text-xl tracking-[0.3em]" inputMode="numeric" pattern="\d{6}" maxLength={6} required
+                 placeholder="000000" value={value} onChange={(e) => setValue(e.target.value.replace(/\D/g, ""))} aria-label="Check-in code" />
+          <button className="btn-primary w-full" disabled={busy || value.length !== 6}>{busy ? "Checking…" : "Check in"}</button>
+          <ErrorNote error={error} />
+        </form>
+      )}
+    </section>
+  );
+}
+
+/**
+ * Participant: opt in to share my (encrypted) emergency contact with the organizer.
+ * The organizer can only open it from 1 day before to 1 day after the trip, and I
+ * get a notification when they do.
+ */
+function EmergencyShareCard({ trip, onChange }) {
+  const e = trip.emergency;
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  if (!e || trip.status === "cancelled" || !["confirmed", "attended"].includes(trip.my_status)) return null;
+  const toggle = async () => {
+    setBusy(true); setError(null);
+    try { await api(`/trips/${trip.id}/emergency-sharing/`, { method: e.i_share ? "DELETE" : "POST" }); await onChange(); }
+    catch (err) { setError(err); }
+    finally { setBusy(false); }
+  };
+  return (
+    <section className="card p-5">
+      <h2 className="mb-1 flex items-center gap-2 font-bold"><LifeBuoy size={18} className="text-red-700" /> Emergency contact</h2>
+      <p className="text-sm text-ink/65">
+        {e.i_share ? "You share your emergency contact with the organizer for this trip." : "Your emergency contact is private. You can let the organizer see it for this trip only."}
+      </p>
+      <p className="mt-1 text-xs text-ink/55">They can open it from {fmtDate(e.opens_at)} until {fmtDate(e.closes_at)}. You'll get a notification if they do.</p>
+      {!e.i_have_contact && !e.i_share
+        ? <Link to="/profile" className="btn-outline mt-3 w-full">Add an emergency contact first</Link>
+        : <button onClick={toggle} disabled={busy} className={`${e.i_share ? "btn-outline" : "btn-primary"} mt-3 w-full`}>
+            {e.i_share ? "Stop sharing" : "Share with the organizer"}</button>}
+      <ErrorNote error={error} className="mt-2" />
+    </section>
+  );
+}
+
+/** Organizer: open the contacts participants shared. Loaded only on click (each read is logged). */
+function EmergencyContacts({ trip }) {
+  const [rows, setRows] = useState(null);
+  const [error, setError] = useState(null);
+  const e = trip.emergency;
+  if (!e || trip.status === "cancelled") return null;
+  if (!e.is_open) return <p className="mt-4 text-xs text-ink/55"><LifeBuoy size={12} className="mr-1 inline" />Emergency contacts that participants share can be opened from {fmtDate(e.opens_at)} until {fmtDate(e.closes_at)}.</p>;
+  const open = async () => { setError(null); try { setRows(await api(`/trips/${trip.id}/emergency-contacts/`)); } catch (err) { setError(err); } };
+  return (
+    <div className="mt-4">
+      <button onClick={open} className="btn-outline w-full"><LifeBuoy size={15} /> Emergency contacts</button>
+      <ErrorNote error={error} className="mt-2" />
+      {rows && (
+        <Modal title="Shared emergency contacts" onClose={() => setRows(null)}>
+          <p className="mb-3 text-xs text-ink/60">Only for emergencies. Each person is notified that you opened this, and the access is logged.</p>
+          {rows.length === 0 ? <p className="text-sm text-ink/65">Nobody has shared an emergency contact for this trip.</p> : (
+            <ul className="divide-y divide-slate-100">
+              {rows.map((r) => (
+                <li key={r.user_id} className="py-2 text-sm">
+                  <p className="font-semibold text-navy-900">{r.display_name}</p>
+                  <p className="text-ink/75">{r.name} ({r.relationship}) · <a className="link" href={`tel:${r.phone}`}>{r.phone}</a></p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Modal>
+      )}
     </div>
   );
 }
@@ -122,6 +246,7 @@ function OrganizerPanel({ trip, reload }) {
         </>}
       </div>
       <ErrorNote error={error} className="mt-3" />
+      <EmergencyContacts trip={trip} />
       {trip.status === "completed" ? (
         <div className="mt-4"><h3 className="mb-2 text-sm font-bold">Record attendance</h3>
           {parts.loading ? <Spinner /> : <Attendance trip={trip} participants={list} onDone={() => { reload(); parts.reload(); }} />}</div>
@@ -246,10 +371,7 @@ export default function TripDetail() {
             </section>
           </div>
           {trip.description && <section><h2 className="mb-2 text-lg font-bold">About this trip</h2><p className="max-w-prose whitespace-pre-line text-ink/80">{trip.description}</p></section>}
-          {!trip.meeting_point_hidden && trip.meeting_latitude && (
-            <section><h2 className="mb-2 text-lg font-bold">Meeting point</h2>
-              <MiniMap lat={trip.meeting_latitude} lng={trip.meeting_longitude} icon={meetIcon} zoom={12} className="h-64" /></section>
-          )}
+          <TripMap trip={trip} />
           {(isOrganizer || ["confirmed", "attended"].includes(trip.my_status)) && (
             <section className="space-y-4">
               <div><h2 className="text-lg font-bold">Trip posts</h2>
@@ -269,6 +391,8 @@ export default function TripDetail() {
             <p className="mt-2 flex items-center gap-2 text-sm text-ink/65"><Users size={15} /> {trip.confirmed_count} confirmed · {trip.waitlist_count} waitlisted</p>
           </section>
           <JoinCard trip={trip} user={user} onChange={reload} />
+          <CheckInCard trip={trip} isOrganizer={isOrganizer} onChange={reload} />
+          <EmergencyShareCard trip={trip} onChange={reload} />
           {isOrganizer && <OrganizerPanel trip={trip} reload={reload} />}
           <Equipment trip={trip} isOrganizer={isOrganizer} reload={reload} />
           <p className="text-xs text-ink/50">Created {fmtDate(trip.created_at)}</p>
@@ -277,5 +401,35 @@ export default function TripDetail() {
       {review && <WriteReview campsiteId={trip.location.id} trips={[trip]} onClose={() => setReview(false)}
                               onDone={() => { setReview(false); setReviewed(true); reload(); }} />}
     </div>
+  );
+}
+
+/**
+ * Campsite + meeting point on one map. The campsite is public. The meeting point
+ * is only drawn when the API sent it: for anyone other than the organizer and
+ * confirmed/attended participants the server returns it as null
+ * (meeting_point_hidden), so it never reaches this browser.
+ */
+function TripMap({ trip }) {
+  const showMeeting = !trip.meeting_point_hidden && trip.meeting_latitude != null && trip.meeting_longitude != null;
+  const pins = [
+    { position: [trip.location.latitude, trip.location.longitude], icon: campIcon,
+      title: `Campsite: ${trip.location.name}`, link: { to: `/campsites/${trip.location.id}`, text: "View campsite" } },
+    ...(showMeeting ? [{ position: [trip.meeting_latitude, trip.meeting_longitude], icon: meetIcon,
+      title: `Meeting point: ${trip.meeting_point_name || "Meeting point"}` }] : []),
+  ];
+  return (
+    <section>
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+        <h2 className="text-lg font-bold">{showMeeting ? "Meeting point and campsite" : "Campsite location"}</h2>
+        <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink/65">
+          <span className="flex items-center gap-1"><MapPin size={14} className="text-forest-700" /> Campsite</span>
+          {showMeeting && <span className="flex items-center gap-1"><MapPin size={14} className="text-sunrise-500" /> Meeting point</span>}
+          {trip.meeting_point_hidden && <span className="flex items-center gap-1"><Lock size={13} /> Meeting point shown to confirmed participants</span>}
+        </p>
+      </div>
+      <PinsMap pins={pins} className="h-64" />
+      <p className="mt-1 text-xs text-ink/55">Tap a pin to see its name.</p>
+    </section>
   );
 }

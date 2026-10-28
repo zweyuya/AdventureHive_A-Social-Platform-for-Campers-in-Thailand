@@ -66,10 +66,17 @@ def _mark(client, trip, records):
     return client.post(f"/api/trips/{trip.pk}/attendance/", {"records": records}, format="json")
 
 
+def _check_in(trip, *users):
+    """The trip ended an hour ago, so check-in is still open (until 24 h after the end)."""
+    for u in users:
+        services.check_in(trip, u, services.checkin_code(trip))
+
+
 @pytest.mark.django_db
 def test_organizer_marks_attendance(finished_trip, login):
     trip, (a, b, _) = finished_trip
     services.complete_finished_trips()
+    _check_in(trip, a)
     client = login(trip.organizer, client=APIClient())
     res = _mark(client, trip, [{"user_id": a.pk, "status": "attended"},
                                {"user_id": b.pk, "status": "no_show"}])
@@ -138,6 +145,7 @@ def test_attendance_is_all_or_nothing(finished_trip, make_user, login):
 def test_only_attended_participants_can_review(finished_trip, login):
     trip, (a, b, _) = finished_trip
     services.complete_finished_trips()
+    _check_in(trip, a)
     services.mark_attendance(trip, trip.organizer, [{"user_id": a.pk, "status": "attended"},
                                                     {"user_id": b.pk, "status": "no_show"}])
     Review.objects.create(trip=trip, user=a, location=trip.location, rating=5)
@@ -149,6 +157,7 @@ def test_only_attended_participants_can_review(finished_trip, login):
 def test_attendance_of_reviewer_cannot_be_revoked(finished_trip, login):
     trip, (a, _, _) = finished_trip
     services.complete_finished_trips()
+    _check_in(trip, a)
     services.mark_attendance(trip, trip.organizer, [{"user_id": a.pk, "status": "attended"}])
     Review.objects.create(trip=trip, user=a, location=trip.location, rating=5)
     client = login(trip.organizer, client=APIClient())

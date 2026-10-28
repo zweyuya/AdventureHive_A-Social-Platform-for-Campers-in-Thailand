@@ -1,7 +1,7 @@
-import { ArrowLeft, Plus, Trash2 } from "lucide-react";
+import { AlertTriangle, ArrowLeft, MapPin, Plus, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { PinPicker } from "../components/maps";
+import { PinPicker, campIcon } from "../components/maps";
 import { ErrorNote, Field, Spinner } from "../components/ui";
 import { api, ApiError, results } from "../lib/api";
 import { useApi } from "../lib/hooks";
@@ -9,9 +9,11 @@ import { DIFFICULTIES, LEVELS, label } from "../lib/format";
 
 const pad = (n) => String(n).padStart(2, "0");
 const toLocalInput = (d) => { const x = new Date(d); return `${x.getFullYear()}-${pad(x.getMonth() + 1)}-${pad(x.getDate())}T${pad(x.getHours())}:${pad(x.getMinutes())}`; };
+/** A typical camping weekend: next Saturday 08:00 → Sunday 17:00 (never today). */
 function defaultDates() {
-  const s = new Date(); s.setDate(s.getDate() + 14); s.setHours(8, 0, 0, 0);
-  const e = new Date(s); e.setDate(e.getDate() + 2); e.setHours(17, 0, 0, 0);
+  const s = new Date();
+  s.setDate(s.getDate() + ((6 - s.getDay() + 7) % 7 || 7)); s.setHours(8, 0, 0, 0);
+  const e = new Date(s); e.setDate(e.getDate() + 1); e.setHours(17, 0, 0, 0);
   return [toLocalInput(s), toLocalInput(e)];
 }
 
@@ -52,8 +54,28 @@ export default function TripForm() {
 
   const site = useMemo(() => results(campsites.data).find((c) => String(c.id) === String(form.location_id)), [campsites.data, form.location_id]);
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
+  // Moving the start moves the end too, keeping the trip's length.
+  const setStart = (e) => {
+    const start = e.target.value;
+    const length = new Date(form.end_datetime) - new Date(form.start_datetime);
+    if (!start || !(length > 0)) return setForm({ ...form, start_datetime: start });
+    setForm({ ...form, start_datetime: start, end_datetime: toLocalInput(new Date(new Date(start).getTime() + length)) });
+  };
+
+  // Where is the meeting point? Province, or a warning when it's outside Thailand.
+  const [meetInfo, setMeetInfo] = useState(null);
+  useEffect(() => {
+    if (!form.meeting) return setMeetInfo(null);
+    let stale = false;
+    api(`/campsites/pin-check/?lat=${form.meeting[0]}&lng=${form.meeting[1]}`)
+      .then((info) => { if (!stale) setMeetInfo(info); })
+      .catch(() => { if (!stale) setMeetInfo(null); }); // the server checks again on save
+    return () => { stale = true; };
+  }, [form.meeting]);
 
   const save = async (publish) => {
+    if (meetInfo && !meetInfo.in_thailand)
+      return setErrors({ meeting_latitude: "Move the meeting point inside Thailand first." });
     setBusy(true); setErrors({});
     const body = {
       title: form.title, description: form.description, location_id: Number(form.location_id) || null,
@@ -114,13 +136,36 @@ export default function TripForm() {
           </Card>
           <Card title="Dates and meeting point">
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Start" required error={errors.start_datetime}><input type="datetime-local" className="input" required value={form.start_datetime} onChange={set("start_datetime")} /></Field>
-              <Field label="End" required error={errors.end_datetime}><input type="datetime-local" className="input" required value={form.end_datetime} onChange={set("end_datetime")} /></Field>
+              <Field label="Start" required error={errors.start_datetime}>
+                {/* past dates are greyed out for new trips (an existing trip may already have started) */}
+                <input type="datetime-local" className="input" required value={form.start_datetime} onChange={setStart}
+                       min={editing ? undefined : toLocalInput(new Date())} /></Field>
+              <Field label="End" required error={errors.end_datetime} hint="Moves with the start date">
+                <input type="datetime-local" className="input" required value={form.end_datetime} onChange={set("end_datetime")}
+                       min={form.start_datetime || undefined} /></Field>
             </div>
             <Field label="Meeting point name" error={errors.meeting_point_name}><input className="input" placeholder="e.g. Khao Yai Visitor Center" value={form.meeting_point_name} onChange={set("meeting_point_name")} /></Field>
             <div>
               <span className="label">Meeting point on the map</span>
-              <PinPicker value={form.meeting} onChange={(p) => setForm({ ...form, meeting: p })} center={site ? [site.latitude, site.longitude] : null} />
+              <PinPicker value={form.meeting} onChange={(p) => { setForm({ ...form, meeting: p }); setErrors((e) => ({ ...e, meeting_latitude: undefined })); }}
+                center={site ? [site.latitude, site.longitude] : null}
+                markers={site ? [{ position: [site.latitude, site.longitude], icon: campIcon, title: `Campsite: ${site.name}` }] : []} />
+              <p className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink/65">
+                <span className="flex items-center gap-1"><MapPin size={13} className="text-sunrise-500" /> Meeting point</span>
+                {site && <span className="flex items-center gap-1"><MapPin size={13} className="text-forest-700" /> Campsite</span>}
+              </p>
+              {form.meeting && (
+                <p className="mt-1 text-sm text-ink/75">
+                  <span className="font-mono text-xs">{form.meeting[0].toFixed(5)}, {form.meeting[1].toFixed(5)}</span>
+                  {meetInfo?.in_thailand && <> · <span className="font-semibold">{meetInfo.province}</span></>}
+                </p>
+              )}
+              {meetInfo && !meetInfo.in_thailand && (
+                <p className="mt-1 flex items-start gap-1.5 rounded-lg bg-red-50 p-2.5 text-sm text-red-800">
+                  <AlertTriangle size={15} className="mt-0.5 shrink-0" />
+                  This meeting point is {meetInfo.country ? `in ${meetInfo.country}` : "outside Thailand"}. Move it inside Thailand.
+                </p>
+              )}
               <p className="mt-1 flex justify-between text-xs text-ink/55">
                 <span>Click the map to set it. Only confirmed participants see the exact spot.</span>
                 {form.meeting && <button type="button" className="link" onClick={() => setForm({ ...form, meeting: null })}>Clear</button>}

@@ -11,6 +11,7 @@ class NotificationType(models.TextChoices):
     TRIP_UPDATED = "trip_updated", "Trip date or place changed"
     TRIP_REMINDER = "trip_reminder", "Trip reminder"
     REVIEW_UNLOCKED = "review_unlocked", "You can now review this campsite"
+    EMERGENCY_CONTACT_VIEWED = "emergency_contact_viewed", "Organizer viewed your emergency contact"
     # Content workflow
     SUBMISSION_APPROVED = "submission_approved", "Campsite submission approved"
     SUBMISSION_REJECTED = "submission_rejected", "Campsite submission rejected"

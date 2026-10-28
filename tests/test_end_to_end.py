@@ -4,7 +4,8 @@ following the demo flow the professor asked to see:
 
 register (PDPA) → log in → browse campsites/map → create & publish a trip →
 RSVP (seat taken → next person waitlisted) → cancel → waitlist promotion →
-trip completes → organizer marks attendance → verified review → campsite rating
+trip completes → participant checks in with the code → organizer marks attendance →
+verified review → campsite rating
 """
 from datetime import timedelta
 
@@ -72,8 +73,8 @@ def test_full_demo_flow():
     assert mali_view["meeting_latitude"] == 17.50  # now visible to her
 
     # 6. The trip happens (simulate time passing) and the scheduled job completes it
-    Trip.objects.filter(pk=trip_id).update(start_datetime=timezone.now() - timedelta(days=3),
-                                           end_datetime=timezone.now() - timedelta(days=1))
+    Trip.objects.filter(pk=trip_id).update(start_datetime=timezone.now() - timedelta(days=2),
+                                           end_datetime=timezone.now() - timedelta(hours=2))
     call_command("complete_trips")
     assert organizer.get(f"/api/trips/{trip_id}/").json()["status"] == "completed"
 
@@ -82,7 +83,13 @@ def test_full_demo_flow():
     assert mali.post("/api/reviews/", {"trip_id": trip_id, "rating": 5},
                      format="json").status_code == 400
 
-    # 8. Ploy records attendance → Mali can now write a verified review
+    # 8. Check-in: Ploy's app shows the trip code, Mali enters it (open until 24 h after the end)
+    code = organizer.get(f"/api/trips/{trip_id}/check-in-code/").json()["code"]
+    assert mali.get(f"/api/trips/{trip_id}/check-in-code/").status_code == 403  # organizer only
+    assert mali.post(f"/api/trips/{trip_id}/check-in/", {"code": code},
+                     format="json").status_code == 200
+
+    # 9. Ploy records attendance → Mali can now write a verified review
     res = organizer.post(f"/api/trips/{trip_id}/attendance/",
                          {"records": [{"user_id": mali_id, "status": "attended"}]}, format="json")
     assert res.status_code == 200
@@ -90,13 +97,13 @@ def test_full_demo_flow():
     review = mali.post("/api/reviews/", {"trip_id": trip_id, "rating": 5,
                                          "review_text": "Freezing but beautiful sunrise."},
                        format="json").json()
-    assert review["verified_attendee"] is True
+    assert review["verified_attendee"] is True and review["verification"] == "check_in"
 
-    # 9. Nok (cancelled, never went) cannot review
+    # 10. Nok (cancelled, never went) cannot review
     assert nok.post("/api/reviews/", {"trip_id": trip_id, "rating": 1},
                     format="json").status_code == 400
 
-    # 10. The campsite now shows the verified rating publicly
+    # 11. The campsite now shows the verified rating publicly
     detail = public.get(f"/api/campsites/{campsite['id']}/").json()
     assert detail["avg_rating"] == "5.00" and detail["review_count"] == 1
     reviews = public.get(f"/api/campsites/{campsite['id']}/reviews/").json()["results"]

@@ -1,5 +1,5 @@
-import { ArrowLeft } from "lucide-react";
-import { useEffect, useState } from "react";
+import { AlertTriangle, ArrowLeft, MapPin } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { PinPicker, campIcon } from "../components/maps";
 import { ErrorNote, Field, Spinner } from "../components/ui";
@@ -17,13 +17,39 @@ export default function SuggestCampsite() {
     permit_details: "", rules: "", permit_info_source: "" });
   const [errors, setErrors] = useState({});
   const [busy, setBusy] = useState(false);
+  const [pinInfo, setPinInfo] = useState(null);
   useEffect(() => {
     const c = existing.data; if (!c) return;
     setForm({ ...form, ...Object.fromEntries(Object.keys(form).filter((k) => k in c).map((k) => [k, c[k] ?? ""])), pin: [c.latitude, c.longitude] });
   }, [existing.data]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Where is the pin? Province, inside Thailand or not, and campsites already nearby.
+  // After a click (not when loading a saved draft) the province is filled in from the pin.
+  const fillProvince = useRef(false);
+  useEffect(() => {
+    if (!form.pin) return;
+    let stale = false;
+    const [lat, lng] = form.pin;
+    api(`/campsites/pin-check/?lat=${lat}&lng=${lng}${id ? `&exclude=${id}` : ""}`)
+      .then((info) => {
+        if (stale) return;
+        setPinInfo(info);
+        if (fillProvince.current && info.province) setForm((f) => ({ ...f, province: info.province }));
+        fillProvince.current = false;
+      })
+      .catch(() => { if (!stale) setPinInfo(null); }); // the server checks again on save
+    return () => { stale = true; };
+  }, [form.pin, id]);
+
+  const pickPin = (pin) => {
+    fillProvince.current = true;
+    setForm((f) => ({ ...f, pin }));
+    setErrors((e) => ({ ...e, pin: undefined, latitude: undefined, province: undefined }));
+  };
+
   const save = async (submit) => {
     if (!form.pin) return setErrors({ pin: "Click the map to place the campsite." });
+    if (pinInfo && !pinInfo.in_thailand) return setErrors({ pin: "Move the pin inside Thailand first." });
     setBusy(true); setErrors({});
     const { pin, ...rest } = form;
     const body = { ...rest, latitude: pin[0], longitude: pin[1] };
@@ -48,9 +74,10 @@ export default function SuggestCampsite() {
         <section className="card space-y-4 p-5">
           <Field label="Campsite name" required error={errors.name}><input className="input" required maxLength={200} value={form.name} onChange={set("name")} /></Field>
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Province" required error={errors.province}>
+            <Field label="Province" required error={errors.province}
+              hint={pinInfo?.province ? "Filled in from the map pin" : "Place the pin on the map to fill this in"}>
               <input className="input" required list="provinces" value={form.province} onChange={set("province")} />
-              <datalist id="provinces">{PROVINCES.map((p) => <option key={p} value={p} />)}</datalist>
+              <datalist id="provinces">{(pinInfo?.provinces?.length ? pinInfo.provinces : PROVINCES).map((p) => <option key={p} value={p} />)}</datalist>
             </Field>
             <Field label="Category"><select className="input" value={form.category} onChange={set("category")}>
               {CAMPSITE_CATEGORIES.map((c) => <option key={c} value={c}>{label(c)}</option>)}</select></Field>
@@ -67,9 +94,10 @@ export default function SuggestCampsite() {
         <section className="card space-y-4 p-5">
           <div>
             <span className="label">Location <span className="text-red-600">*</span></span>
-            <PinPicker value={form.pin} onChange={(p) => setForm({ ...form, pin: p })} icon={campIcon} className="h-64" />
+            <PinPicker value={form.pin} onChange={pickPin} icon={campIcon} className="h-64" />
             {(errors.pin || errors.latitude || errors.longitude) && <p className="mt-1 text-xs text-red-700">{errors.pin || errors.latitude || errors.longitude}</p>}
-            <p className="mt-1 text-xs text-ink/55">Click where the campsite is. It must be inside Thailand.</p>
+            {form.pin ? <PinSummary pin={form.pin} info={pinInfo} />
+              : <p className="mt-1 text-xs text-ink/55">Click where the campsite is. It must be inside Thailand.</p>}
           </div>
           <Field label="Permit"><select className="input" value={form.permit_status} onChange={set("permit_status")}>
             <option value="unknown">I don't know</option><option value="required">Required</option><option value="not_required">Not required</option></select></Field>
@@ -82,6 +110,37 @@ export default function SuggestCampsite() {
           <button className="btn-primary" disabled={busy}>Send for review</button>
         </div>
       </form>
+    </div>
+  );
+}
+
+/** Under the map: coordinates, detected province, and warnings (outside Thailand, possible duplicate). */
+function PinSummary({ pin, info }) {
+  const coords = `${pin[0].toFixed(5)}, ${pin[1].toFixed(5)}`;
+  return (
+    <div className="mt-2 space-y-2 text-sm">
+      <p className="flex items-center gap-1.5 text-ink/75">
+        <MapPin size={15} className="shrink-0 text-forest-700" />
+        <span className="font-mono text-xs">{coords}</span>
+        {info?.in_thailand && <span>· <span className="font-semibold">{info.province}</span></span>}
+      </p>
+      {info && !info.in_thailand && (
+        <p className="flex items-start gap-1.5 rounded-lg bg-red-50 p-2.5 text-red-800">
+          <AlertTriangle size={15} className="mt-0.5 shrink-0" />
+          This pin is {info.country ? `in ${info.country}` : "outside Thailand"}. Move it to where the campsite is in Thailand.
+        </p>
+      )}
+      {info?.nearby?.length > 0 && (
+        <div className="rounded-lg bg-amber-50 p-2.5 text-amber-900">
+          <p className="flex items-center gap-1.5 font-semibold"><AlertTriangle size={15} /> Already on AdventureHive within 1 km:</p>
+          <ul className="ml-6 mt-1 list-disc">
+            {info.nearby.map((c) => (
+              <li key={c.id}><Link to={`/campsites/${c.id}`} className="underline" target="_blank">{c.name}</Link> ({c.distance_km} km)</li>
+            ))}
+          </ul>
+          <p className="mt-1 text-xs">If it's the same place, open it and use "Suggest an edit" instead.</p>
+        </div>
+      )}
     </div>
   );
 }

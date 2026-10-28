@@ -64,11 +64,28 @@ def test_create_trip_is_draft_and_hidden_until_published(organizer, payload):
     ({"participant_capacity": 0}, "participant_capacity"),
     ({"meeting_longitude": None}, "meeting_latitude"),     # only one coordinate
     ({"meeting_latitude": 35.6, "meeting_longitude": 139.7}, "meeting_latitude"),  # not Thailand
+    # Inside the old lat/lng box, but in a neighbouring country
+    ({"meeting_latitude": 18.05, "meeting_longitude": 102.60}, "meeting_latitude"),  # Laos
+    ({"meeting_latitude": 14.09, "meeting_longitude": 103.05}, "meeting_latitude"),  # Cambodia
 ])
 def test_create_validation(organizer, payload, change, field):
     _, client = organizer
     res = client.post("/api/trips/", {**payload, **change}, format="json")
     assert res.status_code == 400 and field in res.json(), res.json()
+
+
+@pytest.mark.django_db
+def test_meeting_point_abroad_names_the_country_and_edits_recheck_only_when_moved(organizer, payload):
+    _, client = organizer
+    res = client.post("/api/trips/", {**payload, "meeting_latitude": 18.05,
+                                      "meeting_longitude": 102.60}, format="json")
+    assert "Laos" in res.json()["meeting_latitude"][0]
+
+    trip_id = client.post("/api/trips/", payload, format="json").json()["id"]
+    url = f"/api/trips/{trip_id}/"
+    assert client.patch(url, {"title": "New title"}, format="json").status_code == 200
+    moved = client.patch(url, {"meeting_latitude": 14.09, "meeting_longitude": 103.05}, format="json")
+    assert moved.status_code == 400 and "Cambodia" in moved.json()["meeting_latitude"][0]
 
 
 @pytest.mark.django_db
@@ -193,6 +210,35 @@ def test_meeting_point_visible_only_to_organizer_and_confirmed(make_trip, make_u
     assert meeting(login(waitlisted, client=APIClient())) is None
     assert meeting(login(confirmed, client=APIClient())) == 15.4
     assert meeting(login(trip.organizer, client=APIClient())) == 15.4
+
+
+@pytest.mark.django_db
+def test_trip_map_data_hides_every_meeting_field_but_keeps_the_public_campsite(
+        make_trip, make_user, login):
+    """The trip page map draws the campsite for everyone and the meeting point only
+    when the API sends it — so the API must hide the name and both coordinates."""
+    trip = make_trip(capacity=1, meeting_point_name="Gate 2", meeting_latitude=15.4,
+                     meeting_longitude=105.5)
+    confirmed, waitlisted, cancelled, stranger = (make_user() for _ in range(4))
+    from trips import services
+    services.rsvp(trip, confirmed)
+    services.rsvp(trip, waitlisted)
+    services.rsvp(trip, cancelled)
+    services.cancel_rsvp(trip, cancelled)
+    url = f"/api/trips/{trip.pk}/"
+    meeting_fields = ("meeting_point_name", "meeting_latitude", "meeting_longitude")
+
+    for client in (APIClient(), login(waitlisted, client=APIClient()),
+                   login(cancelled, client=APIClient()), login(stranger, client=APIClient())):
+        data = client.get(url).json()
+        assert all(data[f] is None for f in meeting_fields) and data["meeting_point_hidden"]
+        assert (data["location"]["latitude"], data["location"]["longitude"]) == (15.40, 105.50)
+
+    for user in (confirmed, trip.organizer):
+        data = login(user, client=APIClient()).get(url).json()
+        assert (data["meeting_point_name"], data["meeting_latitude"], data["meeting_longitude"]) \
+            == ("Gate 2", 15.4, 105.5)
+        assert not data.get("meeting_point_hidden")
 
 
 @pytest.mark.django_db

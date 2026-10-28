@@ -12,13 +12,19 @@ Suggested edit to a published campsite:
 Every approved change is stored in location_revisions (full history: who,
 when, what, and the complete snapshot), so any version can be inspected.
 All transitions run in one transaction with the campsite row locked.
+
+Every pin that is saved must be inside Thailand and match its province
+(check_pin_and_province, using the province boundaries in core/provinces.py).
 """
+from math import cos, radians
+
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
 from django.db.models import Max
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
+from core.provinces import canonical_province, check_pin, distance_km
 from notifications.models import NotificationType, ReferenceType
 from notifications.services import notify
 
@@ -35,6 +41,62 @@ EDITABLE_FIELDS = [
 
 class WorkflowError(ValidationError):
     """A transition that is not allowed from the current state (HTTP 400)."""
+
+
+# --------------------------------------------------------------------------
+# Map pin checks
+# --------------------------------------------------------------------------
+PIN_FIELDS = ("latitude", "longitude", "province")
+NEARBY_KM = 1.0
+
+
+def check_pin_and_province(values: dict, current: Location | None = None) -> dict:
+    """
+    The pin must be inside Thailand and the province must match it; a blank
+    province is filled in from the pin. Returns `values` with the province
+    spelled canonically. Skipped when an edit does not touch the pin or province.
+    """
+    if current is not None and not any(k in values for k in PIN_FIELDS):
+        return values
+
+    def get(key):
+        return values[key] if key in values else getattr(current, key, None)
+
+    lat, lng = get("latitude"), get("longitude")
+    if lat is None or lng is None:
+        return values  # field validation reports the missing pin
+    pin = check_pin(lat, lng)
+    if not pin.in_thailand:
+        where = f"in {pin.country}" if pin.country else "outside Thailand"
+        raise ValidationError({"latitude": [f"This pin is {where}. Campsites must be inside Thailand."]})
+
+    typed = (get("province") or "").strip()
+    if not typed:
+        values["province"] = pin.province
+        return values
+    name = canonical_province(typed)
+    if name is None:
+        raise ValidationError({"province": [f"'{typed}' is not a Thai province."]})
+    if name not in pin.allowed:
+        raise ValidationError({"province": [f"The pin is in {pin.province}, not {name}. "
+                                            f"Move the pin or change the province."]})
+    values["province"] = name
+    return values
+
+
+def nearby_campsites(latitude: float, longitude: float, km: float = NEARBY_KM,
+                     queryset=None, exclude_id=None) -> list[tuple[Location, float]]:
+    """Campsites within `km` of a point, nearest first — to spot duplicate submissions."""
+    pad_lat = km / 111.0
+    pad_lng = pad_lat / max(cos(radians(latitude)), 0.1)
+    qs = (queryset if queryset is not None else Location.objects.all()).filter(
+        latitude__range=(latitude - pad_lat, latitude + pad_lat),
+        longitude__range=(longitude - pad_lng, longitude + pad_lng),
+    )
+    if exclude_id:
+        qs = qs.exclude(pk=exclude_id)
+    found = [(loc, distance_km(latitude, longitude, loc.latitude, loc.longitude)) for loc in qs]
+    return sorted([(loc, d) for loc, d in found if d <= km], key=lambda pair: pair[1])
 
 
 def snapshot(location: Location) -> dict:
@@ -119,6 +181,7 @@ def propose_edit(location: Location, user, changes: dict, summary: str) -> Locat
     location = _lock(location)
     if location.status != LocationStatus.PUBLISHED:
         raise WorkflowError("Edits can only be suggested for published campsites.")
+    changes = check_pin_and_province(dict(changes), location)
     proposed = snapshot(location)
     proposed.update({k: v for k, v in changes.items() if k in EDITABLE_FIELDS})
     if proposed == snapshot(location):

@@ -1,7 +1,7 @@
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { useEffect } from "react";
-import { MapContainer, Marker, Popup, TileLayer, useMap, useMapEvents } from "react-leaflet";
+import { useEffect, useRef } from "react";
+import { MapContainer, Marker, Popup, TileLayer, Tooltip, useMap, useMapEvents } from "react-leaflet";
 import { Link } from "react-router-dom";
 import { Stars } from "./ui";
 
@@ -17,13 +17,38 @@ const pinHtml = (colour) => `
 export const campIcon = L.divIcon({ html: pinHtml("#0f6647"), className: "", iconSize: [34, 42], iconAnchor: [17, 41], popupAnchor: [0, -36] });
 export const meetIcon = L.divIcon({ html: pinHtml("#f58a1f"), className: "", iconSize: [34, 42], iconAnchor: [17, 41], popupAnchor: [0, -36] });
 
-function FitBounds({ points }) {
+function FitBounds({ points, maxZoom = 9 }) {
   const map = useMap();
   useEffect(() => {
-    if (points.length > 1) map.fitBounds(points, { padding: [40, 40], maxZoom: 9 });
-    else if (points.length === 1) map.setView(points[0], 9);
+    if (points.length > 1) map.fitBounds(points, { padding: [40, 40], maxZoom });
+    else if (points.length === 1) map.setView(points[0], maxZoom);
   }, [map, JSON.stringify(points)]); // eslint-disable-line react-hooks/exhaustive-deps
   return null;
+}
+
+/**
+ * Read-only map with several labelled pins, zoomed so all of them are visible.
+ * pins = [{ position: [lat, lng], icon, title, link?: { to, text } }]
+ * Labels are React text (escaped), never HTML strings. Hover shows the title;
+ * a click/tap opens it, which is what works on phones.
+ */
+export function PinsMap({ pins, className = "h-64", maxZoom = 12 }) {
+  const points = pins.map((p) => p.position);
+  return (
+    <MapContainer center={points[0] || THAILAND_CENTER} zoom={maxZoom} className={`rounded-xl ${className}`} scrollWheelZoom={false}>
+      <TileLayer url={TILE} attribution={ATTRIBUTION} />
+      <FitBounds points={points} maxZoom={maxZoom} />
+      {pins.map((p) => (
+        <Marker key={`${p.title}-${p.position.join(",")}`} position={p.position} icon={p.icon}>
+          <Tooltip direction="top" offset={[0, -36]}>{p.title}</Tooltip>
+          <Popup>
+            <p className="text-sm font-semibold text-navy-900">{p.title}</p>
+            {p.link && <Link to={p.link.to} className="link text-xs">{p.link.text}</Link>}
+          </Popup>
+        </Marker>
+      ))}
+    </MapContainer>
+  );
 }
 
 /** Map of campsites from the GeoJSON endpoint. */
@@ -68,12 +93,30 @@ function ClickToPick({ onPick }) {
 }
 
 /** Click the map to choose a point (meeting point, new campsite). */
-export function PinPicker({ value, onChange, center, className = "h-56", icon = meetIcon }) {
+export function PinPicker({ value, onChange, center, className = "h-56", icon = meetIcon, markers = [] }) {
   return (
     <MapContainer center={value || center || THAILAND_CENTER} zoom={value || center ? 10 : 6} className={`rounded-xl ${className}`}>
       <TileLayer url={TILE} attribution={ATTRIBUTION} />
       <ClickToPick onPick={onChange} />
+      <MoveTo point={center} />
+      {markers.map((m) => (
+        <Marker key={m.position.join(",")} position={m.position} icon={m.icon || campIcon}>
+          {m.title && <Tooltip direction="top" offset={[0, -36]}>{m.title}</Tooltip>}
+        </Marker>
+      ))}
       {value && <Marker position={value} icon={icon} />}
     </MapContainer>
   );
+}
+
+/** Pan to `point` when it changes after the map is shown (e.g. a different campsite is chosen). */
+function MoveTo({ point }) {
+  const map = useMap();
+  const first = useRef(true);
+  const key = point ? point.join(",") : "";
+  useEffect(() => {
+    if (first.current) { first.current = false; return; }
+    if (point) map.setView(point, Math.max(map.getZoom(), 10));
+  }, [map, key]); // eslint-disable-line react-hooks/exhaustive-deps
+  return null;
 }

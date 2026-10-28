@@ -15,7 +15,7 @@ from accounts.models import User
 from locations.models import Location, LocationStatus
 from reviews.models import Review
 from trips import services as trip_services
-from trips.models import Trip
+from trips.models import Trip, TripParticipant
 
 
 @pytest.fixture
@@ -30,6 +30,9 @@ def completed_trip(make_trip, make_user):
                                            end_datetime=now - timedelta(days=1))
     trip.refresh_from_db()
     trip_services.complete_finished_trips()
+    # a and b checked in with the trip code during the trip
+    TripParticipant.objects.filter(trip=trip, user__in=[a, b]).update(
+        checked_in_at=now - timedelta(days=2))
     trip_services.mark_attendance(trip, trip.organizer, [
         {"user_id": a.pk, "status": "attended"},
         {"user_id": b.pk, "status": "attended"},

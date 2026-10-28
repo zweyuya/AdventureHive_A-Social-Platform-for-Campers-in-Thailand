@@ -1,14 +1,22 @@
 from django.utils import timezone
 from rest_framework import serializers
 
+from accounts.models import EmergencyContact
 from core.people import avatar_url, display_name as _display_name, person
+from core.provinces import check_pin
 
 from communities.models import CampingGroup
 from locations.models import Location
 
 from .models import ParticipantStatus as PS
 from .models import Trip, TripEquipmentItem, TripParticipant, TripStatus
-from .services import update_trip
+from .services import (
+    checkin_is_open,
+    checkin_window,
+    emergency_window,
+    emergency_window_is_open,
+    update_trip,
+)
 
 
 class _MiniLocation(serializers.ModelSerializer):
@@ -65,13 +73,38 @@ class TripDetailSerializer(TripListSerializer):
     waitlist_count = serializers.SerializerMethodField()
     can_review = serializers.SerializerMethodField(
         help_text="True when the current user may write a review for this trip now.")
+    checkin = serializers.SerializerMethodField(
+        help_text="Check-in window, and when the current user checked in (null if not).")
+    emergency = serializers.SerializerMethodField(
+        help_text="Emergency-contact sharing: the window the organizer can read shared "
+                  "contacts in, and whether the current user shares theirs.")
 
     class Meta(TripListSerializer.Meta):
         fields = TripListSerializer.Meta.fields + [
             "activity_type", "description", "distance_km", "estimated_duration_hours",
             "safety_notes", "meeting_point_name", "meeting_latitude", "meeting_longitude",
-            "equipment_items", "waitlist_count", "can_review", "created_at", "updated_at",
+            "equipment_items", "waitlist_count", "can_review", "checkin", "emergency", "created_at",
+            "updated_at",
         ]
+
+    def get_checkin(self, obj) -> dict:
+        opens, closes = checkin_window(obj)
+        user = self.context["request"].user
+        mine = None
+        if user.is_authenticated:
+            mine = obj.participants.filter(user=user).values_list("checked_in_at", flat=True).first()
+        return {"opens_at": opens, "closes_at": closes, "is_open": checkin_is_open(obj),
+                "my_checked_in_at": mine}
+
+    def get_emergency(self, obj) -> dict:
+        opens, closes = emergency_window(obj)
+        user = self.context["request"].user
+        sharing = has_contact = False
+        if user.is_authenticated:
+            sharing = obj.participants.filter(user=user, share_emergency_contact=True).exists()
+            has_contact = EmergencyContact.objects.filter(user=user).exists()
+        return {"opens_at": opens, "closes_at": closes, "is_open": emergency_window_is_open(obj),
+                "i_share": sharing, "i_have_contact": has_contact}
 
     def get_waitlist_count(self, obj) -> int:
         return obj.participants.filter(status=PS.WAITLISTED).count()
@@ -134,6 +167,11 @@ class TripWriteSerializer(serializers.ModelSerializer):
         if (lat is None) != (lng is None):
             raise serializers.ValidationError(
                 {"meeting_latitude": "Give both meeting latitude and longitude, or neither."})
+        moved = "meeting_latitude" in attrs or "meeting_longitude" in attrs
+        if moved and lat is not None and not (pin := check_pin(lat, lng)).in_thailand:
+            where = f"in {pin.country}" if pin.country else "outside Thailand"
+            raise serializers.ValidationError(
+                {"meeting_latitude": f"This meeting point is {where}. It must be inside Thailand."})
 
         group = attrs.get("group")
         user = self.context["request"].user
@@ -157,7 +195,8 @@ class ParticipantSerializer(serializers.ModelSerializer):
     class Meta:
         model = TripParticipant
         fields = ["user_id", "display_name", "avatar", "camping_experience_level", "status",
-                  "waitlist_position", "joined_at", "attendance_marked_at"]
+                  "waitlist_position", "joined_at", "attendance_marked_at", "checked_in_at",
+                  "verification_method", "override_reason"]
 
     def get_display_name(self, obj) -> str:
         return _display_name(obj.user)
@@ -177,6 +216,22 @@ class RsvpResultSerializer(serializers.ModelSerializer):
 class _AttendanceRecord(serializers.Serializer):
     user_id = serializers.IntegerField()
     status = serializers.ChoiceField(choices=[PS.ATTENDED, PS.NO_SHOW])
+    reason = serializers.CharField(
+        required=False, allow_blank=True, max_length=500,
+        help_text="Required to mark someone attended who did not check in.")
+
+
+class CheckInSerializer(serializers.Serializer):
+    code = serializers.RegexField(r"^\s*\d{6}\s*$", error_messages={"invalid": "Enter the 6-digit code."})
+
+
+class CheckInCodeSerializer(serializers.Serializer):
+    """Organizer only: the code to show participants, and when it works."""
+
+    code = serializers.CharField()
+    opens_at = serializers.DateTimeField()
+    closes_at = serializers.DateTimeField()
+    is_open = serializers.BooleanField()
 
 
 class AttendanceSerializer(serializers.Serializer):
@@ -187,3 +242,13 @@ class AttendanceSerializer(serializers.Serializer):
         if len(ids) != len(set(ids)):
             raise serializers.ValidationError("Each user may appear only once.")
         return records
+
+
+class SharedEmergencyContactSerializer(serializers.Serializer):
+    """Organizer only, inside the emergency window: what a participant chose to share."""
+
+    user_id = serializers.IntegerField()
+    display_name = serializers.CharField()
+    name = serializers.CharField()
+    phone = serializers.CharField()
+    relationship = serializers.CharField()

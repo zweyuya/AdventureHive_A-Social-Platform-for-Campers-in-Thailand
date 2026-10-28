@@ -18,9 +18,12 @@ from .models import Trip, TripEquipmentItem, TripParticipant, TripStatus
 from .permissions import IsOrganizer, IsOrganizerOrStaff
 from .serializers import (
     AttendanceSerializer,
+    CheckInCodeSerializer,
+    CheckInSerializer,
     EquipmentSerializer,
     ParticipantSerializer,
     RsvpResultSerializer,
+    SharedEmergencyContactSerializer,
     TripDetailSerializer,
     TripListSerializer,
     TripWriteSerializer,
@@ -36,7 +39,8 @@ class TripPagination(PageNumberPagination):
 def visible_trips(user, qs=None):
     """
     Drafts: organizer only. Trips in a private group: active members (and the
-    organizer) only. Staff see everything.
+    organizer) only. Members-only trips (their private group was deleted): the
+    organizer and people who joined. Staff see everything.
     """
     qs = qs if qs is not None else Trip.objects.all()
     if user.is_authenticated and user.is_staff:
@@ -49,8 +53,10 @@ def visible_trips(user, qs=None):
     if user.is_authenticated:
         is_member = Exists(GroupMember.objects.filter(
             group=OuterRef("group"), user=user, status="active"))
+        joined = Exists(TripParticipant.objects.filter(trip=OuterRef("pk"), user=user))
+        qs = qs.filter(~Q(members_only=True) | Q(organizer=user) | Q(joined))
         return qs.filter(~private | Q(organizer=user) | Q(is_member))
-    return qs.filter(~private | Q(group__isnull=True))
+    return qs.filter(members_only=False).filter(~private | Q(group__isnull=True))
 
 
 @extend_schema(tags=["trips"])
@@ -65,7 +71,14 @@ class TripViewSet(viewsets.ModelViewSet):
     publish     — organizer: draft → published
     rsvp        — POST join (confirmed or waitlisted), DELETE leave (waitlist #1 promoted)
     participants— organizer only
-    attendance  — organizer, after completion: mark attended / no_show
+    attendance  — organizer, after completion: mark attended / no_show (reason needed for
+                  anyone who did not check in)
+    check-in-code — organizer: the 6-digit code to show participants
+    check-in    — confirmed participant: enter the code (2 h before start → 24 h after end)
+    emergency-sharing  — confirmed participant: POST share / DELETE stop sharing my
+                         emergency contact with the organizer
+    emergency-contacts — organizer (not admins), 1 day before → 1 day after the trip:
+                         read the shared contacts; every read is logged
     mine        — trips I organise or joined
     """
 
@@ -90,7 +103,8 @@ class TripViewSet(viewsets.ModelViewSet):
     def get_permissions(self):
         if self.action in ("list", "retrieve"):
             return [permissions.AllowAny()]
-        if self.action in ("update", "partial_update", "publish", "participants", "attendance"):
+        if self.action in ("update", "partial_update", "publish", "participants", "attendance",
+                           "checkin_code", "emergency_contacts"):
             return [permissions.IsAuthenticated(), IsOrganizer()]
         if self.action == "destroy":
             return [permissions.IsAuthenticated(), IsOrganizerOrStaff()]
@@ -99,6 +113,9 @@ class TripViewSet(viewsets.ModelViewSet):
     def get_throttles(self):
         if self.action == "rsvp":  # RSVP-flooding protection
             self.throttle_scope = "rsvp"
+            return [ScopedRateThrottle()]
+        if self.action == "check_in":  # code-guessing protection
+            self.throttle_scope = "checkin"
             return [ScopedRateThrottle()]
         return super().get_throttles()
 
@@ -111,6 +128,8 @@ class TripViewSet(viewsets.ModelViewSet):
             "partial_update": TripWriteSerializer,
             "participants": ParticipantSerializer,
             "attendance": AttendanceSerializer,
+            "check_in": CheckInSerializer,
+            "checkin_code": CheckInCodeSerializer,
             "rsvp": RsvpResultSerializer,
         }.get(self.action, TripDetailSerializer)
 
@@ -186,6 +205,41 @@ class TripViewSet(viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
         updated = services.mark_attendance(trip, request.user, serializer.validated_data["records"])
         return Response(ParticipantSerializer(updated, many=True).data)
+
+    @extend_schema(responses=CheckInCodeSerializer)
+    @action(detail=True, methods=["get"], url_path="check-in-code")
+    def checkin_code(self, request, pk=None):
+        """Organizer only. Show this code at the meeting point / during the trip."""
+        trip = self.get_object()
+        opens, closes = services.checkin_window(trip)
+        return Response(CheckInCodeSerializer({
+            "code": services.checkin_code(trip), "opens_at": opens, "closes_at": closes,
+            "is_open": services.checkin_is_open(trip)}).data)
+
+    @extend_schema(request=CheckInSerializer, responses=ParticipantSerializer)
+    @action(detail=True, methods=["post"], url_path="check-in")
+    def check_in(self, request, pk=None):
+        """A confirmed participant enters the organizer's code to prove they were there."""
+        trip = self.get_object()
+        serializer = CheckInSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        participant = services.check_in(trip, request.user, serializer.validated_data["code"])
+        return Response({"checked_in_at": participant.checked_in_at})
+
+    @extend_schema(request=None, responses={200: None})
+    @action(detail=True, methods=["post", "delete"], url_path="emergency-sharing")
+    def emergency_sharing(self, request, pk=None):
+        """POST = share my emergency contact with this trip's organizer. DELETE = stop."""
+        participant = services.set_emergency_sharing(self.get_object(), request.user,
+                                                     share=request.method == "POST")
+        return Response({"share_emergency_contact": participant.share_emergency_contact})
+
+    @extend_schema(responses=SharedEmergencyContactSerializer(many=True))
+    @action(detail=True, methods=["get"], url_path="emergency-contacts")
+    def emergency_contacts(self, request, pk=None):
+        """Organizer only, around the trip dates. Each read is logged; people are notified."""
+        rows = services.read_emergency_contacts(self.get_object(), request.user)
+        return Response(SharedEmergencyContactSerializer(rows, many=True).data)
 
     @extend_schema(responses=TripListSerializer(many=True))
     @action(detail=False, methods=["get"])

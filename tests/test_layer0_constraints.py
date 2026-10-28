@@ -86,11 +86,41 @@ def test_waitlist_positions_unique_but_renumbering_works_in_one_transaction(make
 
 
 @pytest.mark.django_db
-def test_attended_requires_attendance_record(make_trip, user):
+def test_attended_requires_attendance_record_and_verification(make_trip, user):
     trip = make_trip()
-    _violates(lambda: TripParticipant.objects.create(trip=trip, user=user, status=PS.ATTENDED))
-    TripParticipant.objects.create(trip=trip, user=user, status=PS.ATTENDED,
-                                   attendance_marked_at=timezone.now())
+    p = TripParticipant.objects.create(trip=trip, user=user, status=PS.CONFIRMED)
+    qs = TripParticipant.objects.filter(pk=p.pk)
+    now = timezone.now()
+    # attended needs: a timestamp, a verification method, and evidence for that method
+    _violates(lambda: qs.update(status=PS.ATTENDED))
+    _violates(lambda: qs.update(status=PS.ATTENDED, attendance_marked_at=now))
+    _violates(lambda: qs.update(status=PS.ATTENDED, attendance_marked_at=now,
+                                verification_method="check_in"))          # no check-in
+    _violates(lambda: qs.update(status=PS.ATTENDED, attendance_marked_at=now,
+                                verification_method="organizer_only"))    # no reason
+    _violates(lambda: qs.update(verification_method="check_in", checked_in_at=now))  # not attended
+    qs.update(status=PS.ATTENDED, attendance_marked_at=now,
+              verification_method="organizer_only", override_reason="Forgot to check in")
+    qs.update(checked_in_at=now, verification_method="check_in")
+
+
+@pytest.mark.django_db
+def test_only_confirmed_participants_can_become_attended(make_trip, make_user):
+    """Rule #6, enforced by the participants_attendance_rules trigger."""
+    trip = make_trip()
+    now = timezone.now()
+    attended = dict(status=PS.ATTENDED, attendance_marked_at=now,
+                    verification_method="organizer_only", override_reason="x")
+    # A row can't be created as attended / no_show (an RSVP creates confirmed or waitlisted)
+    with pytest.raises(IntegrityError, match="attendance_rule"), transaction.atomic():
+        TripParticipant.objects.create(trip=trip, user=make_user(), **attended)
+    # Waitlisted or cancelled people can never be marked attended or no-show
+    for status, position in ((PS.WAITLISTED, 1), (PS.CANCELLED, None)):
+        p = TripParticipant.objects.create(trip=trip, user=make_user(), status=PS.CONFIRMED)
+        TripParticipant.objects.filter(pk=p.pk).update(status=status, waitlist_position=position)
+        for target in (attended, dict(status=PS.NO_SHOW, attendance_marked_at=now)):
+            with pytest.raises(IntegrityError, match="attendance_rule"), transaction.atomic():
+                TripParticipant.objects.filter(pk=p.pk).update(waitlist_position=None, **target)
 
 
 # ---------------- Locations / content workflow ------------------------------
