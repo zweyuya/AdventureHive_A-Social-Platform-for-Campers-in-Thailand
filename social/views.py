@@ -2,7 +2,7 @@ from django.shortcuts import get_object_or_404
 from drf_spectacular.utils import OpenApiParameter, OpenApiTypes, extend_schema
 from rest_framework import mixins, permissions, status, viewsets
 from rest_framework.decorators import action
-from rest_framework.exceptions import NotAuthenticated, PermissionDenied
+from rest_framework.exceptions import NotAuthenticated, PermissionDenied, ValidationError
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.response import Response
@@ -12,9 +12,10 @@ from core.images import process_photo
 from trips.models import Trip
 
 from . import services
-from .models import Comment, ContentStatus, Post, PostStatus
+from .models import Comment, ContentStatus, Post, PostStatus, ReactionType
 from .serializers import (CommentCreateSerializer, CommentSerializer, PostCreateSerializer,
-                          PostEditSerializer, PostSerializer, ReactSerializer, RejectPostSerializer)
+                          PostEditSerializer, PostSerializer, ReactionPersonSerializer,
+                          ReactSerializer, RejectPostSerializer)
 
 
 class PostPagination(PageNumberPagination):
@@ -39,6 +40,7 @@ class PostViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Creat
     approve / reject — group admins & co-admins (reject needs a note)
     hide / restore   — moderators of the group/trip
     react     — PUT {"type": "like|love|haha|wow|sad"} · DELETE removes your reaction
+    reactions — GET who reacted (newest first); ?type=love to show one kind only
     comments  — GET thread · POST {"content_text", "parent_comment_id"?}
     """
 
@@ -84,7 +86,8 @@ class PostViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Creat
             .order_by("-created_at")
 
     def get_permissions(self):
-        if self.action in ("list", "retrieve", "comments") and self.request.method == "GET":
+        if self.action in ("list", "retrieve", "comments", "reactions") \
+                and self.request.method == "GET":
             return [permissions.AllowAny()]
         return [permissions.IsAuthenticated()]
 
@@ -172,6 +175,19 @@ class PostViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Creat
 
     @extend_schema(methods=["GET"], responses=CommentSerializer(many=True))
     @extend_schema(methods=["POST"], request=CommentCreateSerializer, responses={201: CommentSerializer})
+    @extend_schema(responses={200: ReactionPersonSerializer(many=True)}, parameters=[
+        OpenApiParameter("type", OpenApiTypes.STR, description="like|love|haha|wow|sad")])
+    @action(detail=True, methods=["get"])
+    def reactions(self, request, pk=None):
+        """Who reacted. Same visibility as the post itself (private groups: members only)."""
+        qs = services.reactions_for(self.get_object())
+        kind = request.query_params.get("type")
+        if kind:
+            if kind not in ReactionType.values:
+                raise ValidationError({"type": f"Choose one of: {', '.join(ReactionType.values)}."})
+            qs = qs.filter(type=kind)
+        return Response(ReactionPersonSerializer(qs[:500], many=True).data)
+
     @action(detail=True, methods=["get", "post"])
     def comments(self, request, pk=None):
         post = self.get_object()

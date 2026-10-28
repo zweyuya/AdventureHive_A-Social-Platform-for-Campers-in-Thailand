@@ -91,6 +91,7 @@ export function PostComposer({ groupId, tripId, needsApproval, onPosted, placeho
 
 function ReactionBar({ post, onChange }) {
   const [open, setOpen] = useState(false);
+  const [showWho, setShowWho] = useState(false);
   const [error, setError] = useState(null);
   const timer = useRef(null);
   const live = post.status === "published";
@@ -124,12 +125,74 @@ function ReactionBar({ post, onChange }) {
         )}
       </div>
       {post.reaction_count > 0 && (
-        <span className="flex items-center gap-1 text-sm text-ink/65" title={top.map(([k, n]) => `${WORD[k]} ${n}`).join(" · ")}>
+        <button type="button" onClick={() => setShowWho(true)}
+                className="flex items-center gap-1 rounded-md px-1 text-sm text-ink/65 hover:text-forest-800 hover:underline"
+                title={top.map(([k, n]) => `${WORD[k]} ${n}`).join(" · ")}
+                aria-label={`See who reacted (${post.reaction_count})`}>
           <span className="tracking-tighter">{top.map(([k]) => EMOJI[k]).join("")}</span> {post.reaction_count}
-        </span>
+        </button>
       )}
       <ErrorNote error={error} className="w-full" />
+      {showWho && <WhoReacted post={post} onClose={() => setShowWho(false)} />}
     </div>
+  );
+}
+
+/** "Who reacted" window: tabs for All and each reaction type, then the people. */
+function WhoReacted({ post, onClose }) {
+  const { user } = useAuth();
+  const [rows, setRows] = useState(null);
+  const [error, setError] = useState(null);
+  const [tab, setTab] = useState("all");
+
+  useEffect(() => {
+    let alive = true;
+    api(`/posts/${post.id}/reactions/`)
+      .then((r) => alive && setRows(r))
+      .catch((err) => alive && setError(err));
+    return () => { alive = false; };
+  }, [post.id, post.reaction_count, post.my_reaction]);
+
+  const counts = {};
+  (rows || []).forEach((r) => { counts[r.type] = (counts[r.type] || 0) + 1; });
+  const tabs = [["all", `All ${rows?.length ?? ""}`],
+    ...REACTIONS.filter(([k]) => counts[k]).map(([k, e]) => [k, `${e} ${counts[k]}`])];
+  const shown = (rows || []).filter((r) => tab === "all" || r.type === tab);
+
+  return (
+    <Modal title="Reactions" onClose={onClose}>
+      {error ? <ErrorNote error={error} /> : !rows ? <Spinner /> : (
+        <>
+          <div className="mb-3 flex flex-wrap gap-1.5" role="tablist" aria-label="Filter by reaction">
+            {tabs.map(([k, text]) => (
+              <button key={k} role="tab" aria-selected={tab === k} onClick={() => setTab(k)}
+                      className={`rounded-full px-3 py-1 text-sm font-semibold transition-colors ${
+                        tab === k ? "bg-forest-700 text-white" : "bg-slate-100 text-ink/70 hover:bg-forest-100"}`}>
+                {text}
+              </button>
+            ))}
+          </div>
+          {shown.length === 0 ? <p className="text-sm text-ink/60">No reactions yet.</p> : (
+            <ul className="divide-y divide-slate-100">
+              {shown.map((r) => (
+                <li key={`${r.user.id}-${r.type}`} className="flex items-center gap-3 py-2.5">
+                  <span className="relative">
+                    <Avatar name={r.user.display_name} id={r.user.id} src={r.user.avatar} />
+                    <span className="absolute -bottom-1 -right-1 text-sm leading-none" aria-hidden="true">{EMOJI[r.type]}</span>
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-semibold">
+                      {r.user.display_name}{user?.id === r.user.id && <span className="font-normal text-ink/55"> (you)</span>}
+                    </span>
+                    <span className="block text-xs text-ink/55">{WORD[r.type]} · {timeAgo(r.created_at)}</span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
+      )}
+    </Modal>
   );
 }
 

@@ -249,6 +249,12 @@ def reaction_summaries(post_ids, user) -> tuple[dict, dict]:
     return summary, mine
 
 
+def reactions_for(post: Post):
+    """Who reacted to a post, newest first (people who can see the post can see this)."""
+    return Reaction.objects.filter(post=post).select_related("user__profile") \
+        .order_by("-created_at", "-id")
+
+
 # --------------------------------------------------------------------------
 # Comments
 # --------------------------------------------------------------------------

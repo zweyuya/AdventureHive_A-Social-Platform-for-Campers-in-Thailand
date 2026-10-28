@@ -201,6 +201,34 @@ def test_one_reaction_per_user_type_can_change(people, public_gid):
     assert Notification.objects.filter(recipient=author, type="reaction").count() == 2
 
 
+@pytest.mark.django_db
+def test_who_reacted_list_newest_first_and_filter_by_type(people, public_gid):
+    pid = _post(people["mem"][1], content_text="Sunrise", group_id=public_gid).json()["id"]
+    people["co"][1].put(f"/api/posts/{pid}/react/", {"type": "love"}, format="json")
+    people["admin"][1].put(f"/api/posts/{pid}/react/", {"type": "wow"}, format="json")
+
+    rows = APIClient().get(f"/api/posts/{pid}/reactions/").json()  # public group: anyone
+    assert [(r["user"]["id"], r["type"]) for r in rows] == [
+        (people["admin"][0].pk, "wow"), (people["co"][0].pk, "love")]
+    assert set(rows[0]["user"]) == {"id", "display_name", "avatar"}  # no email or other private data
+
+    only_love = people["outsider"][1].get(f"/api/posts/{pid}/reactions/?type=love").json()
+    assert [r["user"]["id"] for r in only_love] == [people["co"][0].pk]
+    assert APIClient().get(f"/api/posts/{pid}/reactions/?type=angry").status_code == 400
+
+    people["co"][1].delete(f"/api/posts/{pid}/react/")  # removed reactions disappear
+    assert len(APIClient().get(f"/api/posts/{pid}/reactions/").json()) == 1
+
+
+@pytest.mark.django_db
+def test_who_reacted_follows_post_privacy(people, private_gid):
+    pid = _post(people["admin"][1], content_text="secret spot", group_id=private_gid).json()["id"]
+    people["mem"][1].put(f"/api/posts/{pid}/react/", {"type": "like"}, format="json")
+    assert len(people["co"][1].get(f"/api/posts/{pid}/reactions/").json()) == 1  # member
+    assert people["outsider"][1].get(f"/api/posts/{pid}/reactions/").status_code == 404
+    assert APIClient().get(f"/api/posts/{pid}/reactions/").status_code == 404
+
+
 # ---------------- Comments ----------------------------------------------------------------
 
 @pytest.mark.django_db

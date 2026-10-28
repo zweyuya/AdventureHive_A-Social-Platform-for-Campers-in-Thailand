@@ -87,6 +87,16 @@ class ReactSerializer(serializers.Serializer):
     type = serializers.ChoiceField(choices=ReactionType.choices)
 
 
+class ReactionPersonSerializer(serializers.Serializer):
+    """One row of "who reacted": the person, their reaction and when."""
+    user = serializers.SerializerMethodField()
+    type = serializers.ChoiceField(choices=ReactionType.choices)
+    created_at = serializers.DateTimeField()
+
+    def get_user(self, obj) -> dict:
+        return person(obj.user)
+
+
 class CommentSerializer(serializers.ModelSerializer):
     author = serializers.SerializerMethodField()
     replies = serializers.SerializerMethodField()
