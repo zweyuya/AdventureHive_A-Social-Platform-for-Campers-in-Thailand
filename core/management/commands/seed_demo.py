@@ -30,11 +30,13 @@ from trips.models import Trip, TripEquipmentItem, TripParticipant, TripStatus
 
 PASSWORD = "DemoCamp123!"
 DOMAIN = "demo.adventurehive.test"
-PEOPLE = [  # display name, experience level
-    ("Nok", "intermediate"), ("Ploy", "advanced"), ("Mint", "intermediate"),
-    ("Palm", "beginner"), ("Tono", "advanced"), ("June", "beginner"),
-    ("Jee", "intermediate"), ("Beam", "expert"),
+PEOPLE = [  # nickname (login: <nickname>@DOMAIN), surname, experience level
+    ("Nok", "Srisuk", "intermediate"), ("Ploy", "Chaiyaporn", "advanced"),
+    ("Mint", "Rattanakul", "intermediate"), ("Palm", "Wongsawat", "beginner"),
+    ("Tono", "Phromsuwan", "advanced"), ("June", "Thongdee", "beginner"),
+    ("Jee", "Saetang", "intermediate"), ("Beam", "Boonmee", "expert"),
 ]
+FULL_NAMES = {f"{nick.lower()}@{DOMAIN}": f"{nick} {surname}" for nick, surname, _ in PEOPLE}
 
 
 class Command(BaseCommand):
@@ -51,10 +53,10 @@ class Command(BaseCommand):
 
         tags = list(InterestTag.objects.all())
         u = {}
-        for i, (name, level) in enumerate(PEOPLE):
+        for i, (name, surname, level) in enumerate(PEOPLE):
             user = User.objects.create_user(email=f"{name.lower()}@{DOMAIN}", password=PASSWORD,
                                             pdpa_consent_at=timezone.now())
-            user.profile.display_name = name
+            user.profile.display_name = f"{name} {surname}"
             user.profile.camping_experience_level = level
             user.profile.city = ["Bangkok", "Chiang Mai", "Khon Kaen", "Phuket"][i % 4]
             user.profile.save()

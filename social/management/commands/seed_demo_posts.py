@@ -37,8 +37,9 @@ class Command(BaseCommand):
 
     @transaction.atomic
     def handle(self, *args, **options):
-        u = {x.profile.display_name: x for x in
-             User.objects.filter(email__endswith=f"@{DOMAIN}").select_related("profile")}
+        # keyed by the nickname in the login email (nok@…), not the display name
+        u = {x.email.split("@")[0].capitalize(): x for x in
+             User.objects.filter(email__endswith=f"@{DOMAIN}")}
         if "Nok" not in u:
             self.stdout.write("Run seed_demo first.")
             return

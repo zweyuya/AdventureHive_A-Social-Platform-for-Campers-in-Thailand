@@ -17,6 +17,7 @@ python manage.py migrate
 python manage.py seed_interest_tags
 python manage.py seed_campsites      # 15 real Thai campsites (safe to re-run)
 python manage.py seed_demo           # optional: demo users, groups, trips, reviews
+python manage.py tidy_demo_accounts  # optional: full Thai names for demo users, removes old test accounts (--dry-run to preview)
 python manage.py createsuperuser   # asks for email, not username
 python manage.py runserver
 ```
