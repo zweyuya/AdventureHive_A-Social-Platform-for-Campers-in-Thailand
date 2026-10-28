@@ -138,6 +138,6 @@ class RevisionSerializer(serializers.ModelSerializer):
 
     def get_edited_by(self, obj) -> str:
         if obj.edited_by_id is None:
-            return "System import"
+            return "AdventureHive team"  # campsites listed by the platform itself
         profile = getattr(obj.edited_by, "profile", None)
         return profile.display_name if profile else "Unknown"

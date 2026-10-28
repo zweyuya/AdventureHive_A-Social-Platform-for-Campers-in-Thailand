@@ -116,3 +116,16 @@ def test_seed_campsites_is_idempotent_and_versioned(api_client):
     assert site.current_version == 1 and site.revisions.count() == 1
     assert site.permit_status == "unknown" and site.permit_info_verified_at is None
     assert len(api_client.get("/api/map/campsites/").json()["features"]) == 15
+
+
+@pytest.mark.django_db
+def test_public_history_and_permit_source_use_user_facing_wording(api_client):
+    from django.core.management import call_command
+    call_command("seed_campsites", stdout=open("/dev/null", "w"))
+    site = Location.objects.first()
+    body = api_client.get(f"/api/campsites/{site.pk}/").content.decode()
+    history = api_client.get(f"/api/campsites/{site.pk}/history/").content.decode()
+    for text in (body, history):
+        assert "seed" not in text.lower() and "System import" not in text
+    assert "First listed by the AdventureHive team" in history
+    assert "AdventureHive team (unverified)" in body

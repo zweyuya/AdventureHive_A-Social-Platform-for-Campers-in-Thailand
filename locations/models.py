@@ -138,7 +138,7 @@ class Location(TimeStampedModel):
     status = models.CharField(
         max_length=20, choices=LocationStatus.choices, default=LocationStatus.DRAFT
     )
-    created_by = models.ForeignKey(  # NULL = imported by the system (seed data)
+    created_by = models.ForeignKey(  # NULL = listed by the AdventureHive team (seed data)
         settings.AUTH_USER_MODEL, null=True, blank=True,
         on_delete=models.SET_NULL, related_name="submitted_locations",
     )

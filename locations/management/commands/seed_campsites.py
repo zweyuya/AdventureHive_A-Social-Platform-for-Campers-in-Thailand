@@ -111,13 +111,13 @@ class Command(BaseCommand):
                     "permit_status": "unknown",
                     "permit_details": "Not yet verified. Check with the managing authority "
                                       "before your trip.",
-                    "permit_info_source": "Seed data (unverified)",
+                    "permit_info_source": "AdventureHive team (unverified)",
                     "status": LocationStatus.PUBLISHED,
                     "created_by": None,
                 },
             )
             if is_new:
-                _record_version(location, None, None, "Imported from seed data")
+                _record_version(location, None, None, "First listed by the AdventureHive team")
                 created += 1
             else:
                 updated += 1
