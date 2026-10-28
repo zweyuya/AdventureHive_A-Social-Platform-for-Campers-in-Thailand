@@ -1,4 +1,6 @@
 """tidy_demo_accounts: full Thai names for demo users, old test accounts removed safely."""
+import io
+
 import pytest
 from django.core.management import call_command
 
@@ -10,7 +12,7 @@ DEMO = "demo.adventurehive.test"
 
 
 def _run(*args):
-    call_command("tidy_demo_accounts", *args, stdout=open("/dev/null", "w"))
+    call_command("tidy_demo_accounts", *args, stdout=io.StringIO())
 
 
 def _name(email):
@@ -19,7 +21,7 @@ def _name(email):
 
 @pytest.mark.django_db
 def test_seed_demo_uses_full_names_and_posts_still_seed():
-    call_command("seed_demo", stdout=open("/dev/null", "w"))
+    call_command("seed_demo", stdout=io.StringIO())
     assert _name(f"nok@{DEMO}") == "Nok Srisuk"
     assert _name(f"ploy@{DEMO}") == "Ploy Chaiyaporn"
     assert Post.objects.filter(user__email=f"ploy@{DEMO}").exists()  # posts found users by email
@@ -27,7 +29,7 @@ def test_seed_demo_uses_full_names_and_posts_still_seed():
 
 @pytest.mark.django_db
 def test_renames_existing_short_names_and_keeps_their_data():
-    call_command("seed_demo", stdout=open("/dev/null", "w"))
+    call_command("seed_demo", stdout=io.StringIO())
     Profile.objects.filter(user__email__endswith=f"@{DEMO}").update(display_name="X")
     Profile.objects.filter(user__email=f"nok@{DEMO}").update(display_name="Nok")
     trips_before = Trip.objects.count()
@@ -62,7 +64,7 @@ def test_old_account_that_organised_a_trip_is_anonymised_not_deleted(make_user, 
 
 @pytest.mark.django_db
 def test_dry_run_changes_nothing(make_user):
-    call_command("seed_demo", stdout=open("/dev/null", "w"))
+    call_command("seed_demo", stdout=io.StringIO())
     Profile.objects.filter(user__email=f"nok@{DEMO}").update(display_name="Nok")
     make_user(email="mali@example.com")
     _run("--dry-run")

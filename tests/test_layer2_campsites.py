@@ -1,4 +1,5 @@
 """Layer 2 — public campsite browsing: list, filters, detail, GeoJSON map, seed data."""
+import io
 from decimal import Decimal
 
 import pytest
@@ -121,7 +122,7 @@ def test_seed_campsites_is_idempotent_and_versioned(api_client):
 @pytest.mark.django_db
 def test_public_history_and_permit_source_use_user_facing_wording(api_client):
     from django.core.management import call_command
-    call_command("seed_campsites", stdout=open("/dev/null", "w"))
+    call_command("seed_campsites", stdout=io.StringIO())
     site = Location.objects.first()
     body = api_client.get(f"/api/campsites/{site.pk}/").content.decode()
     history = api_client.get(f"/api/campsites/{site.pk}/history/").content.decode()
