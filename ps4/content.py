@@ -40,56 +40,72 @@ PROJECT = {
 
 # Participants: codes only. No names, contact details, photos or recordings.
 PARTICIPANTS = [
-    {"code": "P1", "user_class": "Camper (camps about 3 times a year)", "mode": "Online, shown the app",
-     "duration": "10–15 min"},
-    {"code": "P2", "user_class": "Trip organizer", "mode": "Online, shown the app",
-     "duration": "10–15 min"},
-    # {"code": "P3", "user_class": "First-time user", "mode": "Online, shown the app", "duration": "10–15 min"},
+    {"code": "P1", "user_class": "First-time camper (has never camped)",
+     "mode": "Online (Zoom), clickable prototype", "duration": "about 20 min"},
+    {"code": "P2", "user_class": "Regular camper and camping-club member",
+     "mode": "Online (Zoom), clickable prototype", "duration": "about 20 min"},
+    {"code": "P3", "user_class": "Trip organizer",
+     "mode": "Online (Zoom), clickable prototype", "duration": "about 20 min"},
+    {"code": "P4", "user_class": "First-time camper (has never camped)",
+     "mode": "Online (Zoom), clickable prototype", "duration": "about 20 min"},
 ]
 
 FINDINGS = [
-    {"id": "I1", "title": "Trust depends on proof of attendance",
-     "evidence": "P1 and P2 both said they would trust reviews more if the reviewer had verifiably "
-                 "attended the trip.",
-     "meaning": "Verified attendance is the main reason people would trust AdventureHive reviews over "
-                "social-media posts, so it stays a core feature."},
-    {"id": "I2", "title": "Accurate fees and permits matter most to organizers",
-     "evidence": "P2 worried that wrong fees, facilities or permit information could cause problems on "
-                 "a group trip, and would check the change history when fees change. P1 would not look "
-                 "at the history.",
-     "meaning": "Organizers carry the risk of wrong information for the whole group, so they value "
-                "checked data. Campers care more about finding a place quickly."},
-    {"id": "I3", "title": "People want new places to appear quickly",
-     "evidence": "P1 wanted new campsites to appear immediately with a 'not yet verified' label. P2 "
-                 "supported moderator review but would also show new places as 'not yet verified'.",
-     "meaning": "Both accept checking but dislike waiting. A visible but limited 'unverified' state "
-                "can satisfy both."},
-    {"id": "I4", "title": "Organizer effort must be small",
-     "evidence": "P2 accepted spending a few minutes on attendance after a trip and wanted to fix "
-                 "records when someone forgets to check in. P1 did not want class-style roll calls.",
-     "meaning": "Attendance should be close to automatic (self check-in, pre-filled list) with an easy "
-                "way to correct mistakes."},
-    {"id": "I5", "title": "Organizers want an overview of their trips",
-     "evidence": "P2 asked for one place showing participants, free spaces, the waitlist and "
-                 "cancellations, and said it would make them come back.",
-     "meaning": "Organizers are power users; a dashboard of what needs doing keeps them engaged."},
-    {"id": "I6", "title": "Wording can create wrong mental models",
-     "evidence": "P1 read the review badge 'Confirmed by organizer' as meaning organizers can control "
-                 "reviews.",
-     "meaning": "Labels about trust must say exactly what they mean."},
+    {"id": "I1", "title": "Trust needs a credible verification signal",
+     "evidence": "All four participants look for proof before trusting a review: P1 and P2 trust reviews "
+                 "backed by official or authorised sources, P4 checks the verification status and the "
+                 "reviewer, and P3 looks at whether the user is verified. P2 read the attendance badge as "
+                 "meaning the review is trustworthy.",
+     "meaning": "The attendance gate stays the core of the design. Some users also want official "
+                "backing, which attendance alone does not give."},
+    {"id": "I2", "title": "Fees, permits and facilities are hard to find for everyone",
+     "evidence": "P2 found permit pages on an official park site confusing to navigate, P1 named permits "
+                 "and facilities as the hardest information, and P3 had to ask hotels near the campsite "
+                 "to confirm them because no proper website existed.",
+     "meaning": "Checked fee, permit and facility information matters to campers and beginners, not "
+                "only to organizers."},
+    {"id": "I3", "title": "Outdated information and slow responses drive people away",
+     "evidence": "Asked what would stop them using the service, all four named outdated pages, "
+                 "unanswered questions, misinformation or many negative reviews.",
+     "meaning": "Users need to see when information was last checked and when answers were written."},
+    {"id": "I4", "title": "Some prefer direct contact over Q&A",
+     "evidence": "P1 and P2 named Q&A as the least useful feature and preferred a phone call or direct "
+                 "contact; P3 and P4 found no feature least useful.",
+     "meaning": "Q&A must stay fresh to be useful. Personal phone numbers can't be published, but the "
+                "park office's public contact can."},
+    {"id": "I5", "title": "Verification and check-in labels need explaining",
+     "evidence": "P2 asked what “marked by organizer” means, P3 needed a hint on “Checked in” versus "
+                 "“Did not check in”, and P2 suggested renaming “Trips” to “Upcoming trips”.",
+     "meaning": "Labels about trust and check-in need a short explanation next to them."},
+    {"id": "I6", "title": "Organizers accept light attendance work but need clear feedback",
+     "evidence": "P3 found the trip under “Needs your attention” without help, found attendance "
+                 "tracking very helpful and the reason rule fair, but was only sure the list had saved "
+                 "after refreshing.",
+     "meaning": "Keep the dashboard and the reason rule; add a “saved” confirmation and show the "
+                "list first."},
+    {"id": "I7", "title": "Beginners rely on friends and explicit level information",
+     "evidence": "P1 and P4 find places and companions through friends. Both completed the beginner "
+                 "task with no hints and found the experience levels and equipment list clear.",
+     "meaning": "Experience levels, the refusal message and the equipment list work for beginners."},
+    {"id": "I8", "title": "Missing or shared equipment causes problems on trips",
+     "evidence": "P2's group ran short of firewood; P3 said people forget torches or batteries, so "
+                 "torches get shared.",
+     "meaning": "A clear equipment list per trip addresses a real problem."},
 ]
 
 DISAGREEMENTS = [
-    ("Checking new reviews", "P1 preferred stronger checks for very high or very low ratings; P2 "
-                             "thought publishing immediately with reporting was reasonable."),
-    ("Pre-moderation of campsites", "P1 valued speed for spontaneous trips; P2 valued accuracy. Both "
-                                    "suggested an 'unverified' label as the middle ground."),
-    ("Version history", "Useful for the organizer, ignored by the camper."),
+    ("Q&A versus direct contact", "P1 and P2 found Q&A the least useful feature; P3 and P4 found "
+                                  "nothing least useful."),
+    ("Where trust comes from", "P1 and P2 want official or association backing; P3 and P4 judge the "
+                               "reviewer's verification and writing."),
+    ("Camper versus organizer tasks", "The three campers needed no hints; the organizer needed hints on "
+                                      "two of four steps."),
 ]
 
 OPEN_QUESTIONS = [
-    "The first-time camper view is still weakly supported: neither participant so far is new to camping.",
-    "We have no evidence yet from people who camp alone.",
+    "We did not ask whether “unresponsive” meant slow pages or unanswered questions.",
+    "Two participants' camping experience is from outside Thailand, so Thai-specific habits are under-represented.",
+    "All sessions were on a laptop; the phone scenario and campsites without signal are untested.",
     "We don't know whether organizers will keep recording attendance once the novelty wears off.",
 ]
 
@@ -105,15 +121,15 @@ PERSONAS = [
             ("Long-term goals", "Camp more often, try new places, and meet people to camp with regularly."),
             ("Typical tasks", "Browse campsites on the map, read reviews, join a trip, check in at the "
                               "campsite, post photos afterwards."),
-            ("Frustrations", "Social-media posts are out of date or contradict each other; no way to tell "
-                             "if a reviewer really went; waiting for things to be approved."),
+            ("Frustrations", "Official permit pages that send her from page to page; posts and answers that "
+                             "are out of date; no way to tell if a reviewer really went."),
             ("Technology and access", "Uses a phone for almost everything; mobile signal at campsites is "
                                       "weak or missing."),
-            ("Expectations", "Fast discovery, reviews she can trust, and clear labels that don't need explaining."),
+            ("Expectations", "Reviews she can trust, information that shows when it was last checked, and "
+                             "labels that explain themselves."),
         ],
-        "findings": ["I1", "I3", "I6"],
-        "evidence_note": "Also built on P1's wish for terrain and weather information and for ratings "
-                         "by category.",
+        "findings": ["I1", "I2", "I3", "I5", "I8"],
+        "evidence_note": "Mainly built on P2, a regular camper and club member.",
         "scenario": "weekend-trip-mobile",
     },
     {
@@ -128,14 +144,14 @@ PERSONAS = [
             ("Long-term goals", "Build a reputation as a reliable organizer and a regular group of campers."),
             ("Typical tasks", "Create and publish trips, answer questions, handle cancellations, record "
                               "attendance after the trip, run the same trip again."),
-            ("Frustrations", "Keeping track of who is coming in chat threads; wrong fee or permit "
-                             "information; extra admin work after the trip."),
+            ("Frustrations", "No single reliable source for permits and facilities, so he calls around; "
+                             "people forgetting shared items such as torches; extra admin after the trip."),
             ("Technology and access", "Uses a laptop to plan and a phone on the trip."),
-            ("Expectations", "One place to see every trip and what needs doing; quick attendance; "
-                             "accurate, checked campsite data."),
+            ("Expectations", "One place to see every trip and what needs doing; quick attendance with a "
+                             "clear saved message; accurate, checked campsite data."),
         ],
-        "findings": ["I2", "I4", "I5"],
-        "evidence_note": "Also built on P2's answers about version history and suggesting edits.",
+        "findings": ["I2", "I5", "I6", "I8"],
+        "evidence_note": "Mainly built on P3, a trip organizer.",
         "scenario": "run-and-repeat-trip",
     },
     {
@@ -157,11 +173,8 @@ PERSONAS = [
             ("Expectations", "Clear difficulty and experience levels, a simple equipment list, visible "
                              "facilities, and a friendly way to ask questions."),
         ],
-        "findings": ["I1", "I2"],
-        "evidence_note": "Built on what P1 and P2 said about trusting reviews and needing accurate "
-                         "fees and facilities, applied to someone with no camping experience. This "
-                         "persona has the weakest direct evidence so far and is being checked with "
-                         "a first-time camper.",
+        "findings": ["I7", "I2", "I1", "I3"],
+        "evidence_note": "Built on P1 and P4, two first-time campers.",
         "scenario": "first-trip-beginner",
     },
 ]
@@ -191,8 +204,8 @@ SCENARIOS = [
             "He creates the trip, picks the campsite and dates, adds equipment, and publishes it.",
             "The trip fills up; the next person who joins is put on the waitlist.",
             "One participant leaves; the first person on the waitlist is promoted automatically and notified.",
-            "After the trip, “Trips organised” shows the attendance deadline; he confirms the "
-            "pre-filled attendance list.",
+            "After the trip, “Trips organised” shows the attendance deadline. One participant's phone "
+            "battery died, so he marks her as attended with a reason and saves.",
             "He presses “Repeat this trip” for next month; past attendees are invited to join first.",
         ],
         "outcome": "A full trip with no manual list-keeping, a recorded attendance list, and a repeat trip "
@@ -205,16 +218,15 @@ SCENARIOS = [
         "title": "Fah joins her first camping trip",
         "trigger": "Fah's friend posts sunrise photos from a camping trip, and Fah decides to try camping herself.",
         "steps": [
-            "She opens the trips list and looks for an easy trip with no minimum experience level.",
-            "On the trip page she checks the difficulty, the total fees, and the equipment list, "
-            "which says the organizer brings the cooking stove and each person brings a tent.",
-            "On the campsite page she confirms there are restrooms and water, then asks on the Q&A "
-            "“Can I rent a tent at the park?” and gets an answer from an experienced camper.",
-            "Reassured, she joins the trip and gets a confirmed seat.",
+            "She opens the trips list and looks for a trip with no minimum experience.",
+            "On the trip page she checks the difficulty and the equipment list, "
+            "which says the organizer brings the cooking stove and each person brings a tent and sleeping bag.",
+            "On the campsite page she checks the fees and confirms there are restrooms and water.",
+            "She joins the trip and gets a confirmed seat.",
         ],
         "outcome": "Fah joins a trip that suits a beginner and knows what to bring and what it costs.",
-        "exception": "The first trip she likes asks for intermediate experience, so the app does not let "
-                     "her join. She picks another trip marked as suitable for beginners instead.",
+        "exception": "The first trip she likes requires intermediate experience, so the app refuses her "
+                     "and explains why. She picks another trip marked as suitable for beginners instead.",
     },
     {
         "slug": "check-new-campsite", "number": 4, "persona": None, "mobile": False,
@@ -277,9 +289,10 @@ USER_STORIES = [
                   "the free seats go down by one.",
                   "Given a full trip, when I press Join, then I am put on the waitlist with my position shown."]},
     {"id": "US2", "priority": "Must",
-     "story": "As a participant on the waitlist, I am moved up automatically so that I don't need to keep checking.",
-     "criteria": ["Given a full trip and I am first on the waitlist, when a confirmed participant "
-                  "leaves, then I become confirmed and receive a notification."]},
+     "story": "As a first-time camper, I am stopped from joining a trip above my experience level so "
+              "that I don't end up on a trip that is too hard.",
+     "criteria": ["Given a trip requiring intermediate experience and my profile says beginner, when I "
+                  "press Join, then I am not added and I see a message explaining the required level."]},
     {"id": "US3", "priority": "Must · permission",
      "story": "As a camper reading reviews, I see only reviews from people who attended so that I can trust them.",
      "criteria": ["Given a member who was not marked attended on a completed trip to this campsite, when "
@@ -293,15 +306,22 @@ USER_STORIES = [
                   "the trip, then it is shown, the view is logged and I am notified. Outside that window "
                   "it is not shown."]},
     {"id": "US5", "priority": "Must · permission",
-     "story": "As an organizer, I am the only one who can see my trip's participant list so that "
-              "participants' privacy is protected.",
+     "story": "As an organizer, I am the only one who can see and change my trip's attendance list so "
+              "that participants' privacy is protected.",
      "criteria": ["Given a trip, when anyone other than its organizer (including a platform admin) "
-                  "requests the participant list, then the server returns 403."]},
-    {"id": "US6", "priority": "Should",
+                  "requests or changes the attendance list, then the server returns 403."]},
+    {"id": "US6", "priority": "Must",
+     "story": "As an organizer, I can mark a participant who could not check in as attended, with a "
+              "reason, and see that it was saved.",
+     "criteria": ["Given a participant who did not check in, when I mark them attended without a "
+                  "reason, then the save is refused.",
+                  "When I add a reason and save, then the status changes to attended, the reason is "
+                  "stored, and an “Attendance saved” message is shown."]},
+    {"id": "US7", "priority": "Should",
      "story": "As an organizer, I can see all my trips and what needs doing so that I don't miss tasks.",
      "criteria": ["Given I organised a completed trip without recorded attendance, when I open “Trips "
                   "organised”, then it appears under “Needs your attention” with the deadline."]},
-    {"id": "US7", "priority": "Should",
+    {"id": "US8", "priority": "Should",
      "story": "As a member, I can suggest a new campsite so that others can find it quickly.",
      "criteria": ["Given I submit a campsite, then it is shown publicly as “Not yet verified” and "
                   "nobody can organise a trip there.",
@@ -337,59 +357,73 @@ PRIVACY_NOTES = [
 ]
 
 DECISIONS = [
-    {"evidence": "P1 misread the badge “Confirmed by organizer” (I6)",
-     "implication": "Trust labels must be explicit", "decision": "Change",
-     "rationale": "Renamed to “Marked as attended by organizer”; the reviews section says "
-                  "organizers can't edit or remove reviews."},
-    {"evidence": "P1 and P2 trust attendance-based reviews (I1)",
+    {"evidence": "All four participants look for verification before trusting a review (I1)",
      "implication": "Keep the attendance gate", "decision": "Keep",
-     "rationale": "It is the main reason users would trust the platform."},
-    {"evidence": "P1 and P2 dislike waiting for campsite approval (I3)",
-     "implication": "New places should be visible sooner", "decision": "Change",
-     "rationale": "Submitted campsites are now shown as “Not yet verified”. Pre-moderation is "
-                  "kept where it matters: no trips or questions until a moderator approves, because P2 "
-                  "showed wrong information causes real problems on trips."},
-    {"evidence": "P2: wrong fees and permits cause problems (I2)",
-     "implication": "Fees and permit rules need their own fields", "decision": "Add",
-     "rationale": "Added a fees field, separate rules, the managing park office, and a “checked by "
-                  "a moderator” date."},
-    {"evidence": "P2 asked for an organizer dashboard (I5)",
-     "implication": "Overview of trips and tasks", "decision": "Add",
-     "rationale": "“Trips organised” page in the account menu."},
-    {"evidence": "P2 wanted good answers to stand out",
-     "implication": "Rank helpful answers", "decision": "Add",
-     "rationale": "“Helpful” votes; the accepted answer stays first."},
-    {"evidence": "P2 wants to fix missed check-ins (I4)",
-     "implication": "Easy attendance correction", "decision": "Keep",
-     "rationale": "The organizer can mark someone attended with a written reason."},
-    {"evidence": "P2 wanted group messaging between participants",
-     "implication": "Real-time messaging", "decision": "Remove",
-     "rationale": "LINE already covers chat well, and real-time messaging needs extra infrastructure."},
-    {"evidence": "P1 wants weather/terrain and category ratings; P2 wants evidence photos for edits",
-     "implication": "Richer campsite information", "decision": "Defer",
-     "rationale": "Useful, but not needed for the core trip workflow."},
+     "rationale": "It is the main reason participants would trust AdventureHive over social media."},
+    {"evidence": "P2 asked what “marked by organizer” means; P3 needed a hint on check-in (I5)",
+     "implication": "Trust and check-in labels must explain themselves", "decision": "Change",
+     "rationale": "A one-line explanation under each review badge and a check-in note on the attendance list."},
+    {"evidence": "P3 was only sure attendance had saved after refreshing (I6)",
+     "implication": "Visible feedback after saving", "decision": "Add",
+     "rationale": "An “Attendance saved” confirmation (US6)."},
+    {"evidence": "P3 suggested the participant checklist above the check-in code (I6)",
+     "implication": "The organizer's main job comes first", "decision": "Change",
+     "rationale": "Reorder the attendance page."},
+    {"evidence": "P2 found the “Trips” tab name unclear (I5)",
+     "implication": "Clearer navigation wording", "decision": "Change",
+     "rationale": "Rename the tab “Upcoming trips”."},
+    {"evidence": "P3 found the reason for missed check-ins fair (I6)",
+     "implication": "Keep the rule", "decision": "Keep",
+     "rationale": "It stops organizers marking people attended without thought, which protects review trust."},
+    {"evidence": "Permits and facilities were hard to find for P1, P2 and P3 (I2)",
+     "implication": "Checked fee, permit and facility fields", "decision": "Keep",
+     "rationale": "Fields and a “checked by a moderator” date exist; also show them on trip pages."},
+    {"evidence": "All four would leave over outdated or unresponsive pages (I3)",
+     "implication": "Show freshness", "decision": "Change",
+     "rationale": "Show the “last checked” date prominently and a date on every Q&A answer."},
+    {"evidence": "P1 and P2 found Q&A least useful; P3 and P4 did not (I4)",
+     "implication": "Quicker, more authoritative answers", "decision": "Keep",
+     "rationale": "Kept despite criticism: one shared answer helps every later visitor. Members' phone "
+                  "numbers are not published (PDPA); the park office's public contact is shown instead."},
+    {"evidence": "P1 and P4 completed the beginner task without help (I7)",
+     "implication": "The level and refusal design works", "decision": "Keep",
+     "rationale": "Experience levels, the refusal message and the equipment list stay (US2)."},
+    {"evidence": "P1 and P2 want official backing (I1); sign-in with Google was suggested",
+     "implication": "Partner validation; faster sign-up", "decision": "Defer",
+     "rationale": "Park-authority partnerships and an external sign-in provider are beyond this semester."},
+    {"evidence": "Survey: only 1 of 4 would trust AdventureHive reviews more than Facebook or LINE",
+     "implication": "Trust has to be earned visibly", "decision": "Keep",
+     "rationale": "Keep the badge, but explain it and show “last checked” dates; ask again after launch."},
+    {"evidence": "P3 found the trip under “Needs your attention” without help (I6)",
+     "implication": "Organizers need one overview", "decision": "Keep",
+     "rationale": "Keep the “Trips organised” dashboard."},
 ]
 
 MVP_FEATURES = [
-    ("Campsite discovery", "Map, filters and campsite pages with checked fees, permits and rules."),
-    ("Trips", "Create, publish, join and leave, with an automatic waitlist and a capacity that can never be exceeded."),
-    ("Attendance", "Self check-in code plus organizer confirmation."),
-    ("Verified reviews", "Clear badges, reporting, and moderator hiding."),
-    ("Campsite contributions", "Suggestions shown as “Not yet verified”, moderator approval, and version history."),
+    ("Trips", "Create, publish, join and leave, automatic waitlist, capacity that can never be exceeded, "
+              "and experience-level checks with a clear refusal message."),
+    ("Attendance", "Self check-in code, organizer confirmation with a required reason, and a visible "
+                   "“saved” message."),
+    ("Verified reviews", "Only attendees review; badges with one-line explanations; reporting and moderator hiding."),
+    ("Campsite information", "Map, filters, checked fees, permits and facilities with a “last checked” date "
+                             "and the park office contact."),
     ("Organizer tools", "“Trips organised” dashboard, repeat a trip, organizer record."),
+    ("Campsite contributions", "Suggestions shown as “Not yet verified”, moderator approval, and version history."),
     ("Privacy", "PDPA consent, opt-in emergency contact sharing, account deletion."),
-    ("Community", "Groups with post approval, trip posts, Q&A with helpful votes, notifications."),
+    ("Community", "Groups with post approval, trip posts, Q&A with helpful votes and dated answers, notifications."),
 ]
 
 OUT_OF_SCOPE = [
     "Real-time messaging", "Semantic search", "Weather alerts", "Ratings by category",
-    "Evidence photos on edit suggestions", "A native mobile app (the web app works on phones instead)",
+    "Evidence photos on edit suggestions", "Assigning shared equipment to people", "Sign-in with Google",
+    "Partnerships with park authorities", "A native mobile app (the web app works on phones instead)",
 ]
 
 CHANGES_FROM_PROPOSAL = (
     "Messaging and semantic search were moved out of scope. Attendance verification, the organizer "
-    "dashboard, repeat trips, helpful votes, fee and permit fields, and the “Not yet verified” "
-    "campsite state were added or strengthened because of user and course feedback."
+    "dashboard, repeat trips, helpful votes, fee and permit fields, the “Not yet verified” campsite "
+    "state and experience-level checks were added or strengthened because of user and course feedback. "
+    "The prototype sessions added explanation labels, a save confirmation and freshness dates."
 )
 
 PERSONAS_BY_SLUG = {p["slug"]: p for p in PERSONAS}
