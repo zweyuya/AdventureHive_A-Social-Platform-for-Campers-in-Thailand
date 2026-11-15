@@ -265,9 +265,12 @@ class CampsiteMapView(APIView):
     """
 
     permission_classes = [permissions.AllowAny]
+    # Same text search as the list, so the map, the count and the list always agree.
+    search_fields = CampsiteViewSet.search_fields
 
     def get(self, request):
         qs = CampsiteFilter(request.GET, queryset=Location.objects.visible()).qs
+        qs = filters.SearchFilter().filter_queryset(request, qs, self)
         rows = qs.values("id", "name", "category", "province", "avg_rating",
                          "latitude", "longitude", "cover_image", "status")
         features = [
