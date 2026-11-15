@@ -1,0 +1,56 @@
+# Production stack: PostgreSQL + Django (Gunicorn) + Caddy (HTTPS, static and media files).
+#   First time:  bash deploy/docker/make-env.sh <your-dns-name>   then   docker compose up -d --build
+#   Update:      git pull   then   docker compose up -d --build
+# Data lives in named volumes (pgdata, media). Never run "docker compose down -v": it deletes them.
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: adventurehive
+      POSTGRES_USER: adventurehive
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U adventurehive -d adventurehive"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  web:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://adventurehive:${POSTGRES_PASSWORD}@db:5432/adventurehive
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - static:/app/staticfiles
+      - media:/app/media
+
+  caddy:
+    image: caddy:2.8-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN in .env}
+    volumes:
+      - ./deploy/docker/Caddyfile:/etc/caddy/Caddyfile:ro
+      - static:/srv/static:ro
+      - media:/srv/media:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - web
+
+volumes:
+  pgdata:
+  static:
+  media:
+  caddy_data:
+  caddy_config:
