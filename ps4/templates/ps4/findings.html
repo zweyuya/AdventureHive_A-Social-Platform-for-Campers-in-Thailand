@@ -1,0 +1,30 @@
+{% extends "ps4/base.html" %}
+{% block title %}Findings{% endblock %}
+{% block content %}
+<h1>High-level findings</h1>
+<p class="lead">What {{ participants|length }} potential user{{ participants|length|pluralize }} told us, summarised and anonymised. Each finding separates what was said from our interpretation.</p>
+
+<div class="grid" style="margin-top:20px">
+  {% for f in findings %}
+  <div class="card">
+    <span class="pill">{{ f.id }}</span>
+    <h3 style="margin-top:8px">{{ f.title }}</h3>
+    <p class="small" style="margin:0 0 8px"><strong>Evidence:</strong> {{ f.evidence }}</p>
+    <p class="small muted" style="margin:0"><strong>Interpretation:</strong> {{ f.meaning }}</p>
+  </div>
+  {% endfor %}
+</div>
+
+<h2>Where participants disagreed</h2>
+<div class="card"><ul class="clean">
+  {% for topic, text in disagreements %}<li><strong>{{ topic }}:</strong> {{ text }}</li>{% endfor %}
+</ul></div>
+
+<h2>Open questions</h2>
+<div class="card"><ul class="clean">{% for q in open_questions %}<li>{{ q }}</li>{% endfor %}</ul></div>
+
+<div class="actions">
+  <a class="btn" href="{% url 'ps4:mvp' %}">See how this changed the MVP</a>
+  <a class="btn ghost" href="{% url 'ps4:index' %}">Back to PS4 index</a>
+</div>
+{% endblock %}

@@ -11,11 +11,13 @@ from trips.services import complete_finished_trips
 
 
 class Command(BaseCommand):
-    help = "Complete trips whose end time has passed; cancel stale drafts. Idempotent."
+    help = ("Complete trips whose end time has passed; cancel stale drafts; remind attendees "
+            "to share a recap 2 days after a trip. Idempotent.")
 
     def handle(self, *args, **options):
         result = complete_finished_trips()
         self.stdout.write(self.style.SUCCESS(
             f"{result['completed']} trip(s) completed, "
-            f"{result['cancelled_drafts']} stale draft(s) cancelled."
+            f"{result['cancelled_drafts']} stale draft(s) cancelled, "
+            f"{result['recap_reminders']} recap reminder(s) sent."
         ))

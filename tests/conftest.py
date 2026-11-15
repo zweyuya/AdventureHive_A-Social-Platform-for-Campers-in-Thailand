@@ -47,12 +47,18 @@ def location(db):
 
 @pytest.fixture
 def make_trip(db, make_user, location):
+    """Each trip gets its own title. A second trip by the same organizer starts after
+    their last one, so it does not break the one-trip-at-a-time DB rule."""
     def _make(organizer=None, capacity=2, status=TripStatus.PUBLISHED, days_from_now=7, **extra):
+        organizer = organizer or make_user()
         start = timezone.now() + timedelta(days=days_from_now)
+        last = Trip.objects.filter(organizer=organizer).order_by("-end_datetime").first()
+        if last and last.end_datetime > start:
+            start = last.end_datetime + timedelta(hours=1)
         return Trip.objects.create(
-            organizer=organizer or make_user(),
+            organizer=organizer,
             location=extra.pop("loc", location),
-            title="Weekend at Pha Taem",
+            title=f"Weekend at Pha Taem #{next(_seq)}",
             start_datetime=start,
             end_datetime=start + timedelta(days=2),
             participant_capacity=capacity,

@@ -1,13 +1,15 @@
-import { ArrowLeft, Calendar, Check, Clock, Footprints, Gauge, KeyRound, LifeBuoy, Lock, MapPin, Mountain, Pencil, Route, Share2, ShieldAlert, Tent, Trash2, UserCheck, Users, X } from "lucide-react";
+import { ArrowLeft, Calendar, Check, Clock, Footprints, Gauge, KeyRound, LifeBuoy, Lock, MapPin, Mountain, Pencil, Repeat, Route, Share2, ShieldAlert, Tent, Trash2, UserCheck, Users, X } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import CampsiteImage from "../components/CampsiteImage";
+import { OrganizerRecord } from "../components/cards";
 import { PinsMap, campIcon, meetIcon } from "../components/maps";
 import { Avatar, ErrorNote, Modal, Spinner, StatusBadge } from "../components/ui";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { useApi } from "../lib/hooks";
 import { dateRange, fmtDate, fmtTime, label, timeAgo } from "../lib/format";
+import { TRAVEL_MODES, aboutKm, directionsUrl } from "../lib/geo";
 import { WriteReview } from "./CampsiteDetail";
 import { PostComposer, PostList } from "../components/feed";
 
@@ -49,8 +51,19 @@ function JoinCard({ trip, user, onChange }) {
     </>);
   else if (trip.my_status === "attended") body = <p className="font-semibold text-forest-800">You attended this trip.</p>;
   else if (!open) body = <p className="text-sm text-ink/70">This trip is {trip.status === "completed" ? "over" : trip.status}.</p>;
+  else if (trip.priority && !trip.priority.i_am_invited) body = (
+    <p className="rounded-lg bg-sunrise-100/50 p-3 text-sm text-navy-900">
+      This trip repeats <span className="font-semibold">{trip.priority.repeat_of.title}</span>. People who came last time
+      can join first, until {fmtDate(trip.priority.until)}, {fmtTime(trip.priority.until)}. Joining opens to everyone after that.
+    </p>);
   else body = (
     <>
+      {trip.priority?.i_am_invited && (
+        <p className="mb-3 rounded-lg bg-forest-50 p-3 text-sm text-forest-800">
+          You came on <span className="font-semibold">{trip.priority.repeat_of.title}</span>, so you can join first,
+          until {fmtDate(trip.priority.until)}, {fmtTime(trip.priority.until)}.
+        </p>
+      )}
       <button onClick={() => act("POST")} disabled={busy} className="btn-primary w-full py-3">
         {busy ? "Joining…" : trip.spots_left > 0 ? "Join this trip" : "Join the waitlist"}
       </button>
@@ -69,7 +82,7 @@ function JoinCard({ trip, user, onChange }) {
 /**
  * Organizer records attendance. People who checked in with the trip code are
  * pre-marked "attended". Marking someone attended who did NOT check in needs a
- * reason (forgot, phone died…); their review then shows "Confirmed by organizer".
+ * reason (forgot, phone died…); their review then shows "Marked as attended by organizer".
  */
 function Attendance({ trip, participants, onDone }) {
   const confirmed = participants.filter((p) => ["confirmed", "attended", "no_show"].includes(p.status));
@@ -78,7 +91,8 @@ function Attendance({ trip, participants, onDone }) {
   const [reasons, setReasons] = useState(Object.fromEntries(confirmed.map((p) => [p.user_id, p.override_reason || ""])));
   const [error, setError] = useState(null);
   const [saved, setSaved] = useState(false);
-  const needsReason = (p) => marks[p.user_id] === "attended" && !p.checked_in_at;
+  const onAppeal = (p) => p.verification_method === "admin_appeal"; // an admin decided: not editable here
+  const needsReason = (p) => marks[p.user_id] === "attended" && !p.checked_in_at && !onAppeal(p);
   const save = async () => {
     setError(null);
     if (confirmed.some((p) => needsReason(p) && !reasons[p.user_id].trim()))
@@ -100,9 +114,9 @@ function Attendance({ trip, participants, onDone }) {
               <Avatar name={p.display_name} id={p.user_id} src={p.avatar} size="h-8 w-8 text-xs" />
               <span className="flex-1 text-sm font-medium">{p.display_name}
                 <span className={`block text-xs font-normal ${p.checked_in_at ? "text-forest-700" : "text-ink/50"}`}>
-                  {p.checked_in_at ? `✓ Checked in ${fmtTime(p.checked_in_at)}` : "Did not check in"}</span></span>
+                  {onAppeal(p) ? "Marked as attended by an admin (appeal)" : p.checked_in_at ? `✓ Checked in ${fmtTime(p.checked_in_at)}` : "Did not check in"}</span></span>
               {["attended", "no_show"].map((st) => (
-                <button key={st} onClick={() => setMarks({ ...marks, [p.user_id]: st })} aria-pressed={marks[p.user_id] === st}
+                <button key={st} disabled={onAppeal(p)} onClick={() => setMarks({ ...marks, [p.user_id]: st })} aria-pressed={marks[p.user_id] === st}
                         className={`btn-sm rounded-lg border ${marks[p.user_id] === st ? (st === "attended" ? "border-forest-700 bg-forest-700 text-white" : "border-slate-600 bg-slate-600 text-white") : "border-slate-300"}`}>
                   {st === "attended" ? "Attended" : "No-show"}
                 </button>
@@ -118,6 +132,44 @@ function Attendance({ trip, participants, onDone }) {
       <ErrorNote error={error} className="mt-3" />
       <button onClick={save} className="btn-primary mt-3 w-full"><UserCheck size={16} /> {saved ? "Attendance saved" : "Save attendance"}</button>
     </div>
+  );
+}
+
+/**
+ * Marked as a no-show but was there: ask an admin to decide. One appeal per trip.
+ */
+function AppealCard({ trip, onChange }) {
+  const a = trip.appeal;
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  if (!a) return null;
+  const submit = async (e) => {
+    e.preventDefault(); setBusy(true); setError(null);
+    try { await api(`/trips/${trip.id}/attendance-appeal/`, { method: "POST", body: { reason } }); await onChange(); }
+    catch (err) { setError(err); }
+    finally { setBusy(false); }
+  };
+  return (
+    <section className="card border-sunrise-400 p-5">
+      <h2 className="mb-1 flex items-center gap-2 font-bold"><ShieldAlert size={18} className="text-sunrise-600" /> No-show appeal</h2>
+      {a.status === "open" && <p className="text-sm text-ink/70">Your appeal is waiting for an admin's decision.</p>}
+      {a.status === "approved" && <p className="text-sm font-semibold text-forest-800">Your appeal was approved. You are marked as attended.</p>}
+      {a.status === "rejected" && <>
+        <p className="text-sm font-semibold text-navy-900">Your appeal was not approved.</p>
+        <p className="mt-1 text-sm text-ink/70">Admin's note: {a.decision_note}</p>
+      </>}
+      {a.status === null && !a.can_appeal && <p className="text-sm text-ink/70">You were marked as a no-show. The time to appeal ended on {fmtDate(a.closes_at)}.</p>}
+      {a.can_appeal && (
+        <form onSubmit={submit} className="space-y-2">
+          <p className="text-sm text-ink/65">The organizer marked you as a no-show. If you were there, tell an admin what happened. You can appeal once, until {fmtDate(a.closes_at)}.</p>
+          <textarea className="input text-sm" rows={3} required maxLength={2000} placeholder="e.g. I was there but my phone had no signal, so I could not check in."
+                    value={reason} onChange={(e) => setReason(e.target.value)} aria-label="Why you are appealing" />
+          <button className="btn-primary w-full" disabled={busy || !reason.trim()}>{busy ? "Sending…" : "Send appeal"}</button>
+          <ErrorNote error={error} />
+        </form>
+      )}
+    </section>
   );
 }
 
@@ -144,7 +196,7 @@ function CheckInCard({ trip, isOrganizer, onChange }) {
       <h2 className="mb-1 flex items-center gap-2 font-bold"><KeyRound size={18} className="text-sunrise-600" /> Trip check-in</h2>
       <p className="mb-3 text-xs text-ink/60">Open until {fmtDate(c.closes_at)}, {fmtTime(c.closes_at)}</p>
       {isOrganizer ? (
-        code.data ? <>
+        code.error ? <ErrorNote error={code.error} /> : code.data ? <>
           <p className="text-center font-mono text-4xl font-extrabold tracking-[0.3em] text-navy-900">{code.data.code}</p>
           <p className="mt-3 text-sm text-ink/65">Show this code to your group at the meeting point or during the trip. Each person enters it in their app to prove they came.</p>
         </> : <Spinner />
@@ -244,6 +296,10 @@ function OrganizerPanel({ trip, reload }) {
           <Link to={`/trips/${trip.id}/edit`} className="btn-outline"><Pencil size={15} /> Edit</Link>
           <button className="btn-danger" onClick={() => setConfirmCancel(true)}><Trash2 size={15} /> Cancel trip</button>
         </>}
+        {trip.status === "completed" && (
+          <Link to={`/trips/new?repeat=${trip.id}`} className="btn-outline" title="Copy this trip with new dates. Everyone who came is invited first.">
+            <Repeat size={15} /> Repeat this trip</Link>
+        )}
       </div>
       <ErrorNote error={error} className="mt-3" />
       <EmergencyContacts trip={trip} />
@@ -342,6 +398,7 @@ export default function TripDetail() {
             <Avatar name={trip.organizer.display_name} id={trip.organizer.id} src={trip.organizer.avatar} size="h-7 w-7 text-[10px]" />
             Organised by <span className="font-semibold text-navy-900">{trip.organizer.display_name}</span> · posted {timeAgo(trip.created_at)}
           </p>
+          <OrganizerRecord stats={trip.organizer_stats} className="mt-1" />
         </div>
         <button onClick={share} className="btn-outline"><Share2 size={16} /> {copied ? "Link copied" : "Share"}</button>
       </div>
@@ -363,7 +420,7 @@ export default function TripDetail() {
               <Row icon={Tent} k="Campsite" v={<Link className="link" to={`/campsites/${trip.location.id}`}>{trip.location.name}</Link>} />
               <Row icon={MapPin} k="Province" v={trip.location.province} />
               <Row icon={Mountain} k="Difficulty" v={label(trip.difficulty)} />
-              <Row icon={Route} k="Distance" v={trip.distance_km && `${Number(trip.distance_km)} km`} />
+              <Row icon={Route} k="Hiking distance" v={trip.distance_km && `${Number(trip.distance_km)} km`} />
               <Row icon={Clock} k="Estimated duration" v={trip.estimated_duration_hours && `${Number(trip.estimated_duration_hours)} hours`} />
               <Row icon={Gauge} k="Minimum experience" v={label(trip.min_experience_level)} />
               <Row icon={Footprints} k="Meeting point" v={trip.meeting_point_hidden ? <span className="flex items-center gap-1 text-ink/60"><Lock size={13} /> Shown to confirmed participants</span> : trip.meeting_point_name} />
@@ -391,6 +448,7 @@ export default function TripDetail() {
             <p className="mt-2 flex items-center gap-2 text-sm text-ink/65"><Users size={15} /> {trip.confirmed_count} confirmed · {trip.waitlist_count} waitlisted</p>
           </section>
           <JoinCard trip={trip} user={user} onChange={reload} />
+          <AppealCard trip={trip} onChange={reload} />
           <CheckInCard trip={trip} isOrganizer={isOrganizer} onChange={reload} />
           <EmergencyShareCard trip={trip} onChange={reload} />
           {isOrganizer && <OrganizerPanel trip={trip} reload={reload} />}
@@ -430,6 +488,22 @@ function TripMap({ trip }) {
       </div>
       <PinsMap pins={pins} className="h-64" />
       <p className="mt-1 text-xs text-ink/55">Tap a pin to see its name.</p>
+      {showMeeting && trip.meeting_distance_km != null && (
+        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg bg-forest-50 p-3">
+          <p className="mr-auto text-sm text-navy-900">
+            Campsite is <span className="font-semibold">{aboutKm(trip.meeting_distance_km)}</span> from the meeting point
+            <span className="block text-xs text-ink/60">In a straight line. The route is longer: open directions to see it.</span>
+          </p>
+          <div className="flex flex-wrap gap-2" aria-label="Directions from the meeting point to the campsite">
+            {TRAVEL_MODES.map(([mode, text]) => (
+              <a key={mode} className="btn-outline btn-sm" target="_blank" rel="noopener noreferrer"
+                 href={directionsUrl([trip.meeting_latitude, trip.meeting_longitude], [trip.location.latitude, trip.location.longitude], mode)}>
+                {text}
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
     </section>
   );
 }

@@ -10,7 +10,9 @@ import Groups from "./pages/Groups";
 import Feed from "./pages/Feed";
 import PostDetail from "./pages/PostDetail";
 import Login from "./pages/Login";
+import Moderation from "./pages/Moderation";
 import MySubmissions from "./pages/MySubmissions";
+import OrganisedTrips from "./pages/OrganisedTrips";
 import Privacy from "./pages/Privacy";
 import Profile from "./pages/Profile";
 import { QuestionDetail, QuestionList } from "./pages/Questions";
@@ -57,8 +59,10 @@ export default function App() {
         <Route path="campsites/:id" element={<CampsiteDetail />} />
         <Route path="campsites/:id/edit" element={<Private><SuggestCampsite /></Private>} />
         <Route path="my/submissions" element={<Private><MySubmissions /></Private>} />
+        <Route path="moderation" element={<Private><Moderation /></Private>} />
         <Route path="trips" element={<Trips />} />
         <Route path="trips/new" element={<Private><TripForm /></Private>} />
+        <Route path="trips/organised" element={<Private><OrganisedTrips /></Private>} />
         <Route path="trips/:id" element={<TripDetail />} />
         <Route path="trips/:id/edit" element={<Private><TripForm /></Private>} />
         <Route path="groups" element={<Groups />} />

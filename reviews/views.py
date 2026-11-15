@@ -81,8 +81,9 @@ class ReviewViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Cre
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
         review = services.create_review(request.user, data["trip"], data["rating"],
-                                        data.get("review_text", ""))
-        return Response(ReviewSerializer(review).data, status=status.HTTP_201_CREATED)
+                                        data.get("review_text", ""), data.get("organizer_rating"))
+        return Response(ReviewSerializer(review, context={"request": request}).data,
+                        status=status.HTTP_201_CREATED)
 
     @extend_schema(responses=ReviewSerializer)
     def partial_update(self, request, *args, **kwargs):
@@ -91,8 +92,8 @@ class ReviewViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Cre
             raise PermissionDenied("Only the author can edit this review.")
         serializer = ReviewUpdateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        return Response(ReviewSerializer(services.update_review(review,
-                                                                serializer.validated_data)).data)
+        return Response(ReviewSerializer(services.update_review(review, serializer.validated_data),
+                                         context={"request": request}).data)
 
     def destroy(self, request, *args, **kwargs):
         review = self.get_object()
@@ -129,7 +130,7 @@ class ReviewViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Cre
     @action(detail=False, methods=["get"])
     def mine(self, request):
         qs = self.get_queryset().filter(user=request.user).order_by("-created_at")
-        return Response(ReviewSerializer(qs, many=True).data)
+        return Response(ReviewSerializer(qs, many=True, context={"request": request}).data)
 
 
 @extend_schema(tags=["reviews"], parameters=[
@@ -146,6 +147,6 @@ class CampsiteReviewListView(generics.ListAPIView):
     def get_queryset(self):
         if getattr(self, "swagger_fake_view", False):
             return Review.objects.none()
-        location = get_object_or_404(Location.objects.published(), pk=self.kwargs["location_pk"])
+        location = get_object_or_404(Location.objects.visible(), pk=self.kwargs["location_pk"])
         return with_badges(Review.objects.filter(location=location, status=ReviewStatus.PUBLISHED)) \
             .select_related("user__profile", "trip").order_by("-created_at")

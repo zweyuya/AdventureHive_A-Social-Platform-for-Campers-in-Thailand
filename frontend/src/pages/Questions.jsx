@@ -1,4 +1,4 @@
-import { ArrowLeft, Check, Search } from "lucide-react";
+import { ArrowLeft, Check, Search, ThumbsUp } from "lucide-react";
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { Avatar, Empty, ErrorNote, Spinner, StatusBadge, Tabs } from "../components/ui";
@@ -99,6 +99,15 @@ export function QuestionDetail() {
               {a.is_accepted && <span className="ml-auto inline-flex items-center gap-1 text-xs font-semibold text-forest-700"><Check size={14} /> Accepted answer</span>}
             </div>
             <p className="mt-2 whitespace-pre-line text-sm text-ink/85">{a.body}</p>
+            <div className="mt-2 flex items-center gap-2 text-xs text-ink/60">
+              {user && user.id !== a.author.id ? (
+                <button aria-pressed={a.i_found_helpful} title={a.i_found_helpful ? "Take your vote back" : "This answer helped me"}
+                        onClick={() => run(() => api(`/answers/${a.id}/vote/`, { method: a.i_found_helpful ? "DELETE" : "POST" }))}
+                        className={`btn-sm inline-flex items-center gap-1 rounded-lg border ${a.i_found_helpful ? "border-forest-700 bg-forest-700 text-white" : "border-slate-300 text-ink/75"}`}>
+                  <ThumbsUp size={13} /> Helpful{a.helpful_count ? ` · ${a.helpful_count}` : ""}
+                </button>
+              ) : a.helpful_count > 0 && <span className="inline-flex items-center gap-1"><ThumbsUp size={13} /> {a.helpful_count} found this helpful</span>}
+            </div>
             {isAsker && open && !a.is_accepted && (
               <button className="btn-outline btn-sm mt-3" onClick={() => run(() => api(`/questions/${q.id}/accept/`, { method: "POST", body: { answer_id: a.id } }))}>
                 <Check size={14} /> Accept this answer</button>

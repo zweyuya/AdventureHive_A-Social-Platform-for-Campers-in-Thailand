@@ -28,15 +28,19 @@ from core.provinces import canonical_province, check_pin, distance_km
 from notifications.models import NotificationType, ReferenceType
 from notifications.services import notify
 
-from .models import Location, LocationRevision, LocationStatus, RevisionStatus
+from .models import Location, LocationRevision, LocationStatus, PermitStatus, RevisionStatus
 
 # Fields that users may write and that are captured in every version snapshot.
 EDITABLE_FIELDS = [
     "name", "province", "latitude", "longitude", "category", "description",
     "terrain_type", "elevation_m", "has_water_source", "has_restrooms",
     "fire_pit_allowed", "site_capacity", "authority_id", "permit_status",
-    "permit_details", "permit_booking_url", "rules", "permit_info_source",
+    "permit_details", "fees", "permit_booking_url", "rules", "permit_info_source",
 ]
+
+# Changing any of these means the permit information was (re)checked by a moderator.
+PERMIT_FIELDS = ["authority_id", "permit_status", "permit_details", "fees",
+                 "permit_booking_url", "rules", "permit_info_source"]
 
 
 class WorkflowError(ValidationError):
@@ -82,6 +86,17 @@ def check_pin_and_province(values: dict, current: Location | None = None) -> dic
                                             f"Move the pin or change the province."]})
     values["province"] = name
     return values
+
+
+def pin_problem(location: Location) -> str | None:
+    """Why this saved pin must not be published (it was valid when saved; the check runs again)."""
+    pin = check_pin(location.latitude, location.longitude)
+    if not pin.in_thailand:
+        return f"The pin is {f'in {pin.country}' if pin.country else 'outside Thailand'}."
+    name = canonical_province(location.province)
+    if name not in pin.allowed:
+        return f"The pin is in {pin.province}, not {location.province}."
+    return None
 
 
 def nearby_campsites(latitude: float, longitude: float, km: float = NEARBY_KM,
@@ -144,9 +159,13 @@ def approve_submission(location: Location, moderator) -> Location:
     location = _lock(location)
     if location.status != LocationStatus.PENDING_REVIEW:
         raise WorkflowError("Only campsites pending review can be approved.")
+    if problem := pin_problem(location):
+        raise WorkflowError(f"This campsite cannot be approved. {problem}")
     location.status = LocationStatus.PUBLISHED
     location.reviewed_by = moderator
     location.reviewed_at = timezone.now()
+    if location.permit_status != PermitStatus.UNKNOWN:  # nothing to check while it's "I don't know"
+        location.permit_info_verified_at = location.reviewed_at
     location.moderation_note = ""
     location.save()
     _record_version(location, location.created_by, moderator, "Initial submission approved")
@@ -205,9 +224,14 @@ def approve_revision(revision: LocationRevision, moderator) -> LocationRevision:
             f"This suggestion was made on version {base}, but the campsite is now on "
             f"version {location.current_version}. Reject it and ask for a new suggestion."
         )
+    before = snapshot(location)
     for field in EDITABLE_FIELDS:
         if field in revision.snapshot:
             setattr(location, field, revision.snapshot[field])
+    if location.permit_status == PermitStatus.UNKNOWN:
+        location.permit_info_verified_at = None  # back to "haven't been verified yet"
+    elif any(getattr(location, f) != before[f] for f in PERMIT_FIELDS):
+        location.permit_info_verified_at = timezone.now()
     try:
         location.full_clean(exclude=["avg_rating", "embedding"])
     except DjangoValidationError as exc:

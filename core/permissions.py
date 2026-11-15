@@ -26,3 +26,27 @@ class IsSelfOrReadOnly(BasePermission):
         # obj may be a Profile (owner = obj.user_id) or a User (owner = obj.pk).
         owner_id = getattr(obj, "user_id", None) or obj.pk
         return request.user.is_authenticated and owner_id == request.user.pk
+
+
+def can_moderate_campsites(user) -> bool:
+    return user.is_authenticated and (user.is_staff or user.is_moderator)
+
+
+class CanModerateCampsites(BasePermission):
+    """
+    Platform admins and campsite moderators. A moderator cannot decide their own
+    submission. Admins can, because a small site may have only one admin.
+    """
+
+    message = "Only campsite moderators can do this."
+
+    def has_permission(self, request, view):
+        return can_moderate_campsites(request.user)
+
+    def has_object_permission(self, request, view, obj):
+        if request.user.is_staff:
+            return True
+        if obj.created_by_id == request.user.pk:
+            self.message = "You submitted this campsite, so another moderator must decide."
+            return False
+        return True

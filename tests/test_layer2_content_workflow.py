@@ -1,7 +1,8 @@
 """
 UATs for the campsite content workflow (content-management problem set).
 
-UAT-CM-1  A member submits a campsite → pending_review, not public
+UAT-CM-1  A member submits a campsite → pending_review: public only as "Not yet verified"
+          (a draft is never public)
 UAT-CM-2  An admin approves → published, on the list and map, version 1 recorded
 UAT-CM-3  An admin rejects with a note → submitter sees note, edits, resubmits
 UAT-CM-4  A non-admin cannot approve or reject
@@ -55,18 +56,22 @@ def _create_and_submit(client):
 # ---------------- UAT-CM-1 ---------------------------------------------------------
 
 @pytest.mark.django_db
-def test_uat_cm_1_member_submits_campsite_and_it_is_not_public(member):
+def test_uat_cm_1_member_submits_campsite_and_it_shows_only_as_not_yet_verified(member):
     user, client = member
     created = client.post("/api/campsites/", NEW_SITE, format="json")
     assert created.status_code == 201
     assert created.json()["status"] == "draft"
     site_id = created.json()["id"]
 
+    listed, mapped = _public_names()
+    assert "Mon Jam Campsite" not in listed and "Mon Jam Campsite" not in mapped  # draft: private
+
     submitted = client.post(f"/api/campsites/{site_id}/submit/")
     assert submitted.json()["status"] == "pending_review"
 
-    listed, mapped = _public_names()
-    assert "Mon Jam Campsite" not in listed and "Mon Jam Campsite" not in mapped
+    # Submitted: visible to everyone, but marked as not yet verified (see test_unverified_campsites)
+    public = APIClient().get("/api/campsites/").json()["results"]
+    assert [s["status"] for s in public if s["name"] == "Mon Jam Campsite"] == ["pending_review"]
     # ...but the submitter can still see it
     assert client.get(f"/api/campsites/{site_id}/").status_code == 200
     assert [s["status"] for s in client.get("/api/campsites/mine/").json()] == ["pending_review"]
@@ -144,10 +149,9 @@ def test_uat_cm_3_reject_with_note_then_edit_and_resubmit(member, admin):
     # Edit and resubmit
     edited = client.patch(f"/api/campsites/{site_id}/", {"latitude": 18.94}, format="json")
     assert edited.status_code == 200 and edited.json()["latitude"] == 18.94
-    assert client.post(f"/api/campsites/{site_id}/submit/").json()["status"] == "pending_review"
-
     listed, _ = _public_names()
-    assert "Mon Jam Campsite" not in listed
+    assert "Mon Jam Campsite" not in listed  # rejected: private again
+    assert client.post(f"/api/campsites/{site_id}/submit/").json()["status"] == "pending_review"
 
 
 @pytest.mark.django_db
@@ -156,9 +160,10 @@ def test_submitter_cannot_edit_while_pending_and_others_cannot_edit(member, make
     site_id = _create_and_submit(client)
     assert client.patch(f"/api/campsites/{site_id}/", {"name": "X"}, format="json").status_code == 400
 
+    # Others can see it (as "Not yet verified") but can't change or resubmit it
     other = login(make_user(), client=APIClient())
-    assert other.patch(f"/api/campsites/{site_id}/", {"name": "X"}, format="json").status_code == 404
-    assert other.post(f"/api/campsites/{site_id}/submit/").status_code == 404
+    assert other.patch(f"/api/campsites/{site_id}/", {"name": "X"}, format="json").status_code == 403
+    assert other.post(f"/api/campsites/{site_id}/submit/").status_code == 400
 
 
 # ---------------- UAT-CM-4 ---------------------------------------------------------

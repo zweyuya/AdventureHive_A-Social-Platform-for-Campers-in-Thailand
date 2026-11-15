@@ -138,9 +138,9 @@ class QuestionViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
 
 @extend_schema(tags=["q&a"])
 class AnswerViewSet(mixins.UpdateModelMixin, viewsets.GenericViewSet):
-    """Edit your own answer; moderators hide / restore answers."""
+    """Edit your own answer; mark others' answers as helpful; moderators hide / restore answers."""
 
-    http_method_names = ["patch", "post", "head", "options"]
+    http_method_names = ["patch", "post", "delete", "head", "options"]
     serializer_class = AnswerWriteSerializer
 
     def get_queryset(self):
@@ -159,6 +159,13 @@ class AnswerViewSet(mixins.UpdateModelMixin, viewsets.GenericViewSet):
         answer = services.edit_answer(self.get_object(), request.user,
                                       serializer.validated_data["body"])
         return Response(AnswerSerializer(answer).data)
+
+    @extend_schema(request=None, responses={200: None})
+    @action(detail=True, methods=["post", "delete"])
+    def vote(self, request, pk=None):
+        """POST = this answer was helpful to me. DELETE = take the vote back."""
+        count = services.vote_answer(self.get_object(), request.user, helpful=request.method == "POST")
+        return Response({"helpful_count": count, "i_found_helpful": request.method == "POST"})
 
     @extend_schema(request=None, responses=AnswerSerializer)
     @action(detail=True, methods=["post"])

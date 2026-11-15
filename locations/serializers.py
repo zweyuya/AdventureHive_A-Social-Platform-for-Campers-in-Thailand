@@ -1,8 +1,11 @@
 from django.db.models import Count
 from rest_framework import serializers
 
-from .models import Authority, Location, LocationRevision
-from .services import EDITABLE_FIELDS, check_pin_and_province
+from core.people import person
+from core.provinces import check_pin
+
+from .models import Authority, Location, LocationRevision, LocationStatus
+from .services import EDITABLE_FIELDS, check_pin_and_province, nearby_campsites, pin_problem
 
 
 class AuthoritySerializer(serializers.ModelSerializer):
@@ -24,7 +27,8 @@ class CampsiteListSerializer(serializers.ModelSerializer):
         model = Location
         fields = ["id", "name", "province", "category", "latitude", "longitude",
                   "avg_rating", "review_count", "has_water_source", "has_restrooms",
-                  "fire_pit_allowed", "permit_status", "cover_image", "cover_image_credit"]
+                  "fire_pit_allowed", "permit_status", "cover_image", "cover_image_credit",
+                  "status"]  # "pending_review" = shown as "Not yet verified"
 
     def get_cover_image(self, obj) -> str | None:
         return image_url(obj)
@@ -33,12 +37,17 @@ class CampsiteListSerializer(serializers.ModelSerializer):
 class CampsiteDetailSerializer(serializers.ModelSerializer):
     authority = AuthoritySerializer(read_only=True)
     cover_image = serializers.SerializerMethodField()
+    is_mine = serializers.SerializerMethodField(help_text="The viewer suggested this campsite.")
     rating_breakdown = serializers.SerializerMethodField(
         help_text='Reviews per star, e.g. {"5": 16, "4": 5, "3": 1, "2": 0, "1": 1}. Counts the '
                   "same reviews as avg_rating / review_count (published, newest per person).")
 
     def get_cover_image(self, obj) -> str | None:
         return image_url(obj)
+
+    def get_is_mine(self, obj) -> bool:
+        user = self.context["request"].user
+        return user.is_authenticated and obj.created_by_id == user.pk
 
     def get_rating_breakdown(self, obj) -> dict[str, int]:
         from reviews.services import counted_reviews  # local import: reviews depends on locations
@@ -52,11 +61,11 @@ class CampsiteDetailSerializer(serializers.ModelSerializer):
             "id", "name", "province", "category", "description",
             "latitude", "longitude", "terrain_type", "elevation_m",
             "has_water_source", "has_restrooms", "fire_pit_allowed", "site_capacity",
-            "authority", "permit_status", "permit_details", "permit_booking_url",
+            "authority", "permit_status", "permit_details", "fees", "permit_booking_url",
             "rules", "permit_info_source", "permit_info_verified_at",
             "avg_rating", "review_count", "rating_breakdown", "status", "moderation_note",
             "current_version", "created_at", "updated_at",
-            "cover_image", "cover_image_credit",
+            "cover_image", "cover_image_credit", "is_mine",
         ]
 
     def to_representation(self, instance):
@@ -68,6 +77,49 @@ class CampsiteDetailSerializer(serializers.ModelSerializer):
         if not is_owner_or_staff:  # moderation details are private
             data.pop("moderation_note")
         return data
+
+
+class PendingCampsiteSerializer(serializers.ModelSerializer):
+    """A submission as a moderator sees it. Never includes the submitter's email or phone."""
+
+    authority = AuthoritySerializer(read_only=True)
+    cover_image = serializers.SerializerMethodField()
+    submitted_by = serializers.SerializerMethodField()
+    pin_check = serializers.SerializerMethodField()
+    nearby = serializers.SerializerMethodField(
+        help_text="Published and pending campsites within 1 km: possible duplicates.")
+
+    class Meta:
+        model = Location
+        fields = [
+            "id", "name", "province", "category", "description", "latitude", "longitude",
+            "terrain_type", "elevation_m", "has_water_source", "has_restrooms",
+            "fire_pit_allowed", "site_capacity", "authority", "permit_status", "permit_details",
+            "fees", "permit_booking_url", "rules", "permit_info_source", "cover_image",
+            "cover_image_credit", "moderation_note", "submitted_by", "updated_at",
+            "pin_check", "nearby",
+        ]
+
+    def get_cover_image(self, obj) -> str | None:
+        return image_url(obj)
+
+    def get_submitted_by(self, obj) -> dict | None:
+        return person(obj.created_by) if obj.created_by_id else None
+
+    def get_pin_check(self, obj) -> dict:
+        pin = check_pin(obj.latitude, obj.longitude)
+        return {"in_thailand": pin.in_thailand, "country": pin.country,
+                "province": pin.province, "problem": pin_problem(obj)}
+
+    def get_nearby(self, obj) -> list[dict]:
+        others = Location.objects.filter(
+            status__in=[LocationStatus.PUBLISHED, LocationStatus.PENDING_REVIEW])
+        return [
+            {"id": loc.id, "name": loc.name, "province": loc.province, "status": loc.status,
+             "latitude": loc.latitude, "longitude": loc.longitude, "distance_km": round(km, 2)}
+            for loc, km in nearby_campsites(obj.latitude, obj.longitude, queryset=others,
+                                            exclude_id=obj.pk)
+        ]
 
 
 class CampsiteWriteSerializer(serializers.ModelSerializer):

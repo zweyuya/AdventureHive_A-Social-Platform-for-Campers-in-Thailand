@@ -33,6 +33,9 @@ class Review(models.Model):
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="reviews"
     )
     rating = models.PositiveSmallIntegerField()
+    # Optional: how good the trip's organizer was (the rating above is for the campsite).
+    # Only the author sees it; the organizer only sees the average (organizer_stats).
+    organizer_rating = models.PositiveSmallIntegerField(null=True, blank=True)
     review_text = models.TextField(blank=True)
     status = models.CharField(
         max_length=10, choices=ReviewStatus.choices, default=ReviewStatus.PUBLISHED
@@ -51,6 +54,11 @@ class Review(models.Model):
             models.UniqueConstraint(fields=["trip", "user"], name="reviews_one_per_trip_user"),
             models.CheckConstraint(
                 name="reviews_rating_1_to_5", condition=Q(rating__gte=1, rating__lte=5)
+            ),
+            models.CheckConstraint(
+                name="reviews_organizer_rating_1_to_5",
+                condition=Q(organizer_rating__isnull=True)
+                | Q(organizer_rating__gte=1, organizer_rating__lte=5),
             ),
         ]
 

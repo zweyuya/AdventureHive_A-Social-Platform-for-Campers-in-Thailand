@@ -1,13 +1,14 @@
-import { AlertTriangle, ArrowLeft, BadgeCheck, Droplets, Flag, Flame, History, Mountain, Pencil, Share2, ShowerHead, TreePine, Users } from "lucide-react";
+import { AlertTriangle, ArrowLeft, BadgeCheck, Droplets, ExternalLink, Flag, Flame, History, Mountain, Pencil, Phone, Share2, ShowerHead, TreePine, Users } from "lucide-react";
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import CampsiteImage from "../components/CampsiteImage";
 import { MiniMap } from "../components/maps";
-import { Avatar, Empty, ErrorNote, Field, Modal, SectionHead, Spinner, StarPicker, Stars, StatusBadge, Tabs } from "../components/ui";
+import PermitFields, { permitBody } from "../components/PermitFields";
+import { Avatar, Empty, ErrorNote, Field, Modal, NotVerifiedBadge, SectionHead, Spinner, StarPicker, Stars, StatusBadge, Tabs, isUnverified } from "../components/ui";
 import { api, results } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { useApi } from "../lib/hooks";
-import { dateRange, fmtDate, label, timeAgo } from "../lib/format";
+import { dateRange, fmtDate, isStale, label, splitList, timeAgo } from "../lib/format";
 
 function Facility({ icon: Icon, title, value, on }) {
   return (
@@ -19,21 +20,47 @@ function Facility({ icon: Icon, title, value, on }) {
   );
 }
 
-function PermitNotice({ c }) {
+function PermitNotice({ c, onSuggest }) {
   const booking = c.permit_booking_url || c.authority?.booking_url;
+  const phone = c.authority?.phone;
+  const fees = splitList(c.fees, /\s*(?:·|;|\n)\s*/);
   const tone = c.permit_status === "required" ? "border-sunrise-400 bg-sunrise-100/60" : "border-slate-200 bg-slate-50";
+  const Row = ({ k, children }) => (
+    <div className="grid gap-1 sm:grid-cols-[8rem_1fr] sm:gap-3"><dt className="font-semibold text-ink/55">{k}</dt><dd>{children}</dd></div>
+  );
   return (
     <div className={`flex gap-3 rounded-xl border p-4 text-sm ${tone}`}>
       <AlertTriangle size={20} className="mt-0.5 shrink-0 text-sunrise-600" />
-      <div>
+      <div className="min-w-0 flex-1">
         <p className="font-semibold text-navy-900">
           {c.permit_status === "required" ? "This campsite requires a permit." :
            c.permit_status === "not_required" ? "No permit is needed here." : "Permit requirements haven't been verified yet."}
         </p>
-        {c.permit_details && <p className="mt-1 text-ink/75">{c.permit_details}</p>}
-        {c.authority && <p className="mt-1 text-ink/75">Managed by {c.authority.name}{c.authority.phone && ` · ${c.authority.phone}`}</p>}
-        {booking && <a href={booking} target="_blank" rel="noreferrer" className="link mt-1 inline-block">Book with the park office</a>}
-        <p className="mt-1 text-xs text-ink/50">Source: {c.permit_info_source || "unknown"}{c.permit_info_verified_at && ` · checked ${fmtDate(c.permit_info_verified_at)}`}</p>
+        <dl className="mt-3 space-y-2 text-ink/80">
+          {fees.length > 0 && <Row k="Fees"><span className="flex flex-wrap gap-1.5">{fees.map((f) => (
+            <span key={f} className="rounded-md border border-sunrise-400/50 bg-white px-2 py-0.5 font-semibold text-navy-900">{f}</span>))}</span></Row>}
+          {c.permit_details && <Row k="How to get it">{c.permit_details}</Row>}
+          {c.authority && <Row k="Managed by">{c.authority.name}{phone && ` · ${phone}`}</Row>}
+        </dl>
+        {(booking || phone) && (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {booking && <a href={booking} target="_blank" rel="noreferrer" className="btn-primary btn-sm">Book with the park office <ExternalLink size={14} /></a>}
+            {phone && <a href={`tel:${phone.replace(/[^\d+]/g, "")}`} className="btn-outline btn-sm"><Phone size={14} /> Call the park</a>}
+          </div>
+        )}
+        <div className="mt-3 space-y-1 text-xs text-ink/55">
+          <p>Source: {c.permit_info_source || "unknown"}</p>
+          {c.permit_info_verified_at && (
+            <p className="inline-flex items-center gap-1 rounded-full bg-forest-50 px-2.5 py-0.5 font-semibold text-forest-800">
+              <BadgeCheck size={13} /> Checked by a moderator · {fmtDate(c.permit_info_verified_at)}</p>
+          )}
+        </div>
+        {isStale(c.permit_info_verified_at) && (
+          <p className="mt-3 rounded-lg border border-slate-200 bg-white p-2.5 text-xs text-ink/75">
+            <span className="font-semibold text-navy-900">Old information?</span> This was last checked over a year ago. Fees and rules may have changed.
+            {onSuggest && <> <button type="button" onClick={onSuggest} className="link">Suggest an edit</button></>}
+          </p>
+        )}
       </div>
     </div>
   );
@@ -41,13 +68,14 @@ function PermitNotice({ c }) {
 
 function SuggestEdit({ c, onClose }) {
   const [form, setForm] = useState({ permit_status: c.permit_status, permit_details: c.permit_details, rules: c.rules,
+    fees: c.fees, permit_booking_url: c.permit_booking_url, authority_id: c.authority?.id ?? "",
     has_water_source: c.has_water_source, has_restrooms: c.has_restrooms, fire_pit_allowed: c.fire_pit_allowed,
-    permit_info_source: "", edit_summary: "" });
+    permit_info_source: c.permit_info_source, edit_summary: "" });
   const [error, setError] = useState(null);
   const [done, setDone] = useState(false);
   const submit = async (e) => {
     e.preventDefault(); setError(null);
-    try { await api(`/campsites/${c.id}/revisions/`, { method: "POST", body: form }); setDone(true); }
+    try { await api(`/campsites/${c.id}/revisions/`, { method: "POST", body: permitBody(form) }); setDone(true); }
     catch (err) { setError(err); }
   };
   if (done) return (
@@ -66,14 +94,7 @@ function SuggestEdit({ c, onClose }) {
               checked={form[k]} onChange={(e) => setForm({ ...form, [k]: e.target.checked })} /> {t}</label>
           ))}
         </div>
-        <Field label="Permit">
-          <select className="input" value={form.permit_status} onChange={(e) => setForm({ ...form, permit_status: e.target.value })}>
-            <option value="required">Required</option><option value="not_required">Not required</option><option value="unknown">Unknown</option>
-          </select>
-        </Field>
-        <Field label="Permit details"><textarea className="input" rows={2} value={form.permit_details} onChange={(e) => setForm({ ...form, permit_details: e.target.value })} /></Field>
-        <Field label="Rules"><textarea className="input" rows={2} value={form.rules} onChange={(e) => setForm({ ...form, rules: e.target.value })} /></Field>
-        <Field label="Where did you get this information?"><input className="input" placeholder="e.g. Sign at the park gate, DNP website" value={form.permit_info_source} onChange={(e) => setForm({ ...form, permit_info_source: e.target.value })} /></Field>
+        <PermitFields form={form} setForm={setForm} errors={error} sourceLabel="Where did you get this information?" />
         <Field label="Summary of your change" required><input className="input" required maxLength={300} placeholder="e.g. Added permit fee from the gate sign" value={form.edit_summary} onChange={(e) => setForm({ ...form, edit_summary: e.target.value })} /></Field>
         <ErrorNote error={error} />
         <button className="btn-primary w-full">Send for review</button>
@@ -85,13 +106,15 @@ function SuggestEdit({ c, onClose }) {
 export function WriteReview({ campsiteId, trips, onClose, onDone }) {
   const [tripId, setTripId] = useState(trips[0]?.id || "");
   const [rating, setRating] = useState(0);
+  const [organizerRating, setOrganizerRating] = useState(0);
   const [text, setText] = useState("");
   const [error, setError] = useState(null);
   const submit = async (e) => {
     e.preventDefault();
     if (!rating) return setError("Choose a star rating.");
     try {
-      await api("/reviews/", { method: "POST", body: { trip_id: Number(tripId), rating, review_text: text } });
+      await api("/reviews/", { method: "POST", body: { trip_id: Number(tripId), rating, review_text: text,
+                                                       organizer_rating: organizerRating || null } });
       onDone();
     } catch (err) { setError(err); }
   };
@@ -112,7 +135,12 @@ export function WriteReview({ campsiteId, trips, onClose, onDone }) {
             </Field>
           )}
           {trips.length === 1 && <p className="text-sm text-ink/70">From your trip: <span className="font-semibold">{trips[0].title}</span></p>}
-          <div><span className="label">Your rating</span><StarPicker value={rating} onChange={setRating} /></div>
+          <div><span className="label">Your rating of the campsite</span><StarPicker value={rating} onChange={setRating} label="Campsite rating" /></div>
+          <div>
+            <span className="label">How was the organizer, {(trips.find((t) => String(t.id) === String(tripId)) || trips[0]).organizer?.display_name || "the organizer"}? (optional)</span>
+            <StarPicker value={organizerRating} onChange={setOrganizerRating} label="Organizer rating" />
+            <p className="mt-1 text-xs text-ink/55">Only you see this. It counts in the organizer's average, which is shown after 3 people have rated them.</p>
+          </div>
           <Field label="Your review"><textarea className="input" rows={4} maxLength={5000} value={text} onChange={(e) => setText(e.target.value)}
                                                 placeholder="What should other campers know?" /></Field>
           <ErrorNote error={error} />
@@ -159,13 +187,15 @@ function ReportReview({ review, onClose }) {
 }
 
 /**
- * Badge shows how the reviewer's attendance was verified:
- * checked in with the trip code + confirmed by the organizer, or organizer only.
+ * Badge shows how the reviewer's attendance was recorded: checked in with the trip code,
+ * marked as attended by the organizer (no check-in), or by an admin on a no-show appeal.
+ * It is about attendance only: organizers can't edit or remove reviews.
  */
 export function ReviewItem({ r }) {
   const { user } = useAuth();
   const [reporting, setReporting] = useState(false);
   const checkedIn = r.verification === "check_in";
+  const onAppeal = r.verification === "admin_appeal";
   const visited = new Date(r.trip.start_datetime).toLocaleDateString("en-GB", { month: "short", year: "numeric" });
   return (
     <article className="border-b border-slate-100 py-4 last:border-0">
@@ -174,9 +204,11 @@ export function ReviewItem({ r }) {
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-semibold">{r.author.display_name}</span>
-            <span title={checkedIn ? "Checked in with the trip code and confirmed by the organizer" : "Confirmed by the organizer (no check-in)"}
+            <span title={checkedIn ? "Checked in at the campsite with the trip code. Organizers can't edit or remove reviews."
+                   : onAppeal ? "The organizer marked this person as a no-show; an admin accepted their appeal and marked them as attended. Organizers can't edit or remove reviews."
+                   : "The organizer marked this person as attended. They didn't check in with the trip code. Organizers can't edit or remove reviews."}
                   className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${checkedIn ? "bg-forest-100 text-forest-800" : "bg-slate-100 text-slate-700"}`}>
-              <BadgeCheck size={13} /> {checkedIn ? "Verified attendee · checked in" : "Confirmed by organizer"}</span>
+              <BadgeCheck size={13} /> {checkedIn ? "Verified attendee · checked in" : onAppeal ? "Marked as attended by an admin (appeal)" : "Marked as attended by organizer"}</span>
             <span className="ml-auto text-xs text-ink/50">{fmtDate(r.created_at)}{r.edited_at && " · edited"}</span>
           </div>
           <p className="text-xs text-ink/55">Visited {visited} · {r.trip.title}</p>
@@ -195,7 +227,7 @@ export function ReviewItem({ r }) {
   );
 }
 
-function QAPanel({ campsiteId }) {
+function QAPanel({ campsiteId, verified = true }) {
   const { user } = useAuth();
   const { data, loading, reload } = useApi(`/questions/?location=${campsiteId}`);
   const [form, setForm] = useState({ title: "", body: "" });
@@ -207,7 +239,7 @@ function QAPanel({ campsiteId }) {
   };
   return (
     <div className="space-y-5">
-      {user ? (
+      {!verified ? <p className="text-sm text-ink/65">Questions open once a moderator has checked this campsite.</p> : user ? (
         <form onSubmit={ask} className="card space-y-3 p-4">
           <p className="font-semibold">Ask about this campsite</p>
           <input className="input" required maxLength={200} placeholder="Your question, e.g. Is there mobile signal?" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
@@ -217,7 +249,7 @@ function QAPanel({ campsiteId }) {
         </form>
       ) : <p className="text-sm text-ink/65"><Link to="/login" className="link">Log in</Link> to ask a question.</p>}
       {loading && <Spinner />}
-      {!loading && results(data).length === 0 && <Empty title="No questions yet">Be the first to ask.</Empty>}
+      {verified && !loading && results(data).length === 0 && <Empty title="No questions yet">Be the first to ask.</Empty>}
       <ul className="divide-y divide-slate-100">
         {results(data).map((q) => (
           <li key={q.id} className="py-3">
@@ -288,7 +320,15 @@ export default function CampsiteDetail() {
             {copied && <span className="absolute right-14 top-4 rounded bg-white px-2 py-1 text-xs">Link copied</span>}
           </section>
           {c.cover_image_credit && <p className="mt-1 text-right text-xs text-ink/50">{c.cover_image_credit}</p>}
-          {c.status !== "published" && <p className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">This campsite is <StatusBadge status={c.status} /> and only visible to you.{c.moderation_note && ` Moderator note: ${c.moderation_note}`}</p>}
+          {isUnverified(c) && (
+            <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
+              <NotVerifiedBadge />
+              <p className="mt-1.5">A member suggested this campsite and a moderator hasn't checked it yet, so details such as fees and permits may be wrong.
+                Trips and questions open once it's verified.</p>
+              {c.is_mine && <p className="mt-1 text-xs text-amber-900/80">You suggested it. You'll get a notification when a moderator decides.</p>}
+            </div>
+          )}
+          {!["published", "pending_review"].includes(c.status) && <p className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">This campsite is <StatusBadge status={c.status} /> and only visible to you.{c.moderation_note && ` Moderator note: ${c.moderation_note}`}</p>}
 
           <div className="mt-4"><Tabs active={tab} onChange={setTab} tabs={[["overview", "Overview"], ["trips", `Trips (${openTrips.length})`],
             ["reviews", `Reviews (${c.review_count})`], ["qa", "Q&A"], ["map", "Map"], ["history", "History"]]} /></div>
@@ -307,9 +347,10 @@ export default function CampsiteDetail() {
                     <Facility icon={TreePine} title="Terrain" value={c.terrain_type || "Unknown"} />
                   </div>
                 </div>
-                <PermitNotice c={c} />
+                <PermitNotice c={c} onSuggest={user && c.status === "published" ? () => setModal("edit") : null} />
                 {c.description && <p className="max-w-prose text-ink/80">{c.description}</p>}
-                {c.rules && <div><h3 className="font-bold">Rules</h3><p className="mt-1 max-w-prose text-sm text-ink/80">{c.rules}</p></div>}
+                {c.rules && <div><h3 className="font-bold">Rules</h3>
+                  <ul className="mt-1 max-w-prose list-disc space-y-0.5 pl-5 text-sm text-ink/80">{splitList(c.rules).map((r) => <li key={r}>{r}</li>)}</ul></div>}
                 <div className="flex flex-wrap items-center gap-3 border-t border-slate-100 pt-4 text-sm text-ink/60">
                   <History size={16} /> Version {c.current_version} · last updated {fmtDate(c.updated_at)}
                   {user && c.status === "published" && <button onClick={() => setModal("edit")} className="btn-outline btn-sm ml-auto"><Pencil size={14} /> Suggest an edit</button>}
@@ -318,9 +359,11 @@ export default function CampsiteDetail() {
             )}
             {tab === "trips" && (openTrips.length ? (
               <ul className="space-y-3">{openTrips.map((t) => <TripRow key={t.id} t={t} />)}</ul>
-            ) : <Empty title="No upcoming trips here" action={<Link to={`/trips/new?campsite=${c.id}`} className="btn-primary">Organise a trip</Link>} />)}
+            ) : <Empty title="No upcoming trips here" action={c.status === "published"
+                  ? <Link to={`/trips/new?campsite=${c.id}`} className="btn-primary">Organise a trip</Link> : null}>
+                  {isUnverified(c) && "Trips can be organised here once a moderator has checked this campsite."}</Empty>)}
             {tab === "reviews" && <ReviewList reviews={reviews} onWrite={() => setModal("review")} user={user} c={c} />}
-            {tab === "qa" && <QAPanel campsiteId={c.id} />}
+            {tab === "qa" && <QAPanel campsiteId={c.id} verified={c.status === "published"} />}
             {tab === "map" && <MiniMap lat={c.latitude} lng={c.longitude} className="h-96" />}
             {tab === "history" && <HistoryPanel campsiteId={c.id} />}
           </div>
@@ -328,7 +371,7 @@ export default function CampsiteDetail() {
 
         <aside className="space-y-6">
           <section className="card p-4">
-            <SectionHead title="Upcoming trips here" action={<Link to={`/trips/new?campsite=${c.id}`} className="link text-sm">Organise one</Link>} />
+            <SectionHead title="Upcoming trips here" action={c.status === "published" && <Link to={`/trips/new?campsite=${c.id}`} className="link text-sm">Organise one</Link>} />
             {openTrips.length === 0 ? <p className="text-sm text-ink/60">No trips planned yet.</p>
               : <ul className="space-y-3">{openTrips.slice(0, 3).map((t) => <TripRow key={t.id} t={t} compact />)}</ul>}
           </section>
@@ -418,10 +461,10 @@ function ReviewList({ reviews, onWrite, user, compact, c }) {
     <div>
       <div className="mb-2 flex items-center justify-between gap-3">
         <h2 className="text-lg font-bold">Reviews</h2>
-        {user && <button onClick={onWrite} className="btn-primary btn-sm">Write a review</button>}
+        {user && c?.status !== "pending_review" && <button onClick={onWrite} className="btn-primary btn-sm">Write a review</button>}
       </div>
       {c && <RatingBreakdown c={c} compact={compact} />}
-      <p className="text-xs text-ink/55">Only campers who attended a trip here can review. Each person counts once in the rating (their newest review).</p>
+      <p className="text-xs text-ink/55">Only campers who attended a trip here can review. Each person counts once in the rating (their newest review). The badge shows how their attendance was recorded; organizers can't edit or remove reviews.</p>
       {reviews.loading && <Spinner />}
       {!reviews.loading && items.length === 0 && <p className="mt-3 text-sm text-ink/60">No reviews yet.</p>}
       {(compact ? items.slice(0, 3) : items).map((r) => <ReviewItem key={r.id} r={r} />)}

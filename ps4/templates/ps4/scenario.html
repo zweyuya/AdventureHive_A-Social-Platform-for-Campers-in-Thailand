@@ -1,0 +1,20 @@
+{% extends "ps4/base.html" %}
+{% block title %}Scenario {{ scenario.number }}{% endblock %}
+{% block content %}
+<span class="pill navy">Scenario {{ scenario.number }}</span>{% if scenario.mobile %} <span class="pill sun">Mobile · primary user</span>{% endif %}
+<h1>{{ scenario.title }}</h1>
+<p class="lead">User: {% if owner %}<a href="{% url 'ps4:persona' owner.slug %}">{{ owner.name }}, {{ owner.role|lower }}</a>{% else %}{{ scenario.actor }}{% endif %}</p>
+
+<div class="card" style="margin-top:16px">
+  <div class="scenario-part"><strong>Trigger</strong><div>{{ scenario.trigger }}</div></div>
+  <div class="scenario-part"><strong>Steps</strong>
+    <ol class="steps">{% for step in scenario.steps %}<li>{{ step }}</li>{% endfor %}</ol></div>
+  <div class="scenario-part"><strong>Expected outcome</strong><div>{{ scenario.outcome }}</div></div>
+  <div class="scenario-part"><strong>Exception or difficulty</strong><div class="exception">{{ scenario.exception }}</div></div>
+</div>
+
+<div class="actions">
+  {% if owner %}<a class="btn" href="{% url 'ps4:persona' owner.slug %}">Back to {{ owner.name }}'s profile</a>{% endif %}
+  <a class="btn {% if owner %}ghost{% endif %}" href="{% url 'ps4:index' %}">Back to PS4 index</a>
+</div>
+{% endblock %}

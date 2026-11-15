@@ -55,6 +55,9 @@ class User(AbstractBaseUser, PermissionsMixin):
     deleted_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     is_staff = models.BooleanField(default=False)
+    # Least-privilege role: reviews campsite submissions in the app and nothing else.
+    # Not staff, so no Django admin. Granted by an admin, never through the API.
+    is_moderator = models.BooleanField(default=False)
 
     objects = UserManager()
 

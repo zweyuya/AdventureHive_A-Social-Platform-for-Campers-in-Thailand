@@ -23,12 +23,16 @@ export class ApiError extends Error {
   }
 }
 
+// Extra data the server sends with an error (not a message to show).
+const NOT_MESSAGES = new Set(["conflicting_trip_id"]);
+
 function flatten(data) {
   if (!data) return "";
   if (typeof data === "string") return data;
   if (Array.isArray(data)) return data.map(flatten).join(" ");
   if (data.detail) return flatten(data.detail);
   return Object.entries(data)
+    .filter(([k]) => !NOT_MESSAGES.has(k))
     .map(([k, v]) => (k === "non_field_errors" ? flatten(v) : `${k.replaceAll("_", " ")}: ${flatten(v)}`))
     .join(" ");
 }

@@ -25,10 +25,18 @@ class ReviewSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Review
-        fields = ["id", "campsite_id", "campsite_name", "campsite_image", "rating", "review_text", "author", "trip",
-                  "verified_attendee", "verification", "counts_in_rating", "status", "created_at",
-                  "edited_at"]
+        fields = ["id", "campsite_id", "campsite_name", "campsite_image", "rating", "organizer_rating",
+                  "review_text", "author", "trip", "verified_attendee", "verification",
+                  "counts_in_rating", "status", "created_at", "edited_at"]
         read_only_fields = fields
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        request = self.context.get("request")
+        # Private to the author, so organizers can't find out who rated them low.
+        if not (request and request.user.is_authenticated and request.user.pk == instance.user_id):
+            data.pop("organizer_rating")
+        return data
 
     def get_campsite_image(self, obj) -> str | None:
         return obj.location.cover_image.url if obj.location.cover_image else None
@@ -81,9 +89,14 @@ class ReviewReportSerializer(serializers.Serializer):
 class ReviewCreateSerializer(serializers.Serializer):
     trip_id = serializers.PrimaryKeyRelatedField(queryset=Trip.objects.all(), source="trip")
     rating = serializers.IntegerField(min_value=1, max_value=5)
+    organizer_rating = serializers.IntegerField(
+        min_value=1, max_value=5, required=False, allow_null=True,
+        help_text="Optional: how was the organizer? Only you see it; it counts in their average.")
     review_text = serializers.CharField(required=False, allow_blank=True, max_length=5000)
 
 
 class ReviewUpdateSerializer(serializers.Serializer):
     rating = serializers.IntegerField(min_value=1, max_value=5, required=False)
+    organizer_rating = serializers.IntegerField(min_value=1, max_value=5, required=False,
+                                                allow_null=True)
     review_text = serializers.CharField(required=False, allow_blank=True, max_length=5000)

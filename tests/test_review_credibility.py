@@ -381,9 +381,30 @@ def test_demo_checkin_trip_command_gives_an_open_check_in():
     from django.core.management import call_command
     call_command("seed_campsites")
     call_command("seed_demo")  # includes one demo check-in trip
-    call_command("demo_checkin_trip")  # a fresh one for presentation day
-    demo = Trip.objects.filter(title__endswith="(just finished)").order_by("-pk")
-    assert demo.count() == 2
-    trip = demo.first()
+    first = Trip.objects.get(title__endswith="(just finished)")
+    call_command("demo_checkin_trip")  # a fresh one for presentation day replaces it
+    demo = Trip.objects.filter(title__endswith="(just finished)")
+    assert demo.count() == 1
+    trip = demo.get()
+    assert trip.pk != first.pk
     assert trip.status == "completed" and services.checkin_is_open(trip)
     assert trip.participants.filter(status=PS.CONFIRMED).count() == 3
+
+
+@pytest.mark.django_db
+def test_demo_checkin_trip_only_replaces_the_demo_organizers_trip():
+    from django.core.management import call_command
+    from django.utils import timezone
+    from accounts.models import User
+    call_command("seed_campsites")
+    call_command("seed_demo")
+    old = Trip.objects.get(title__endswith="(just finished)")
+    nok = User.objects.get(email="nok@demo.adventurehive.test")
+    now = timezone.now()
+    other = Trip.objects.create(
+        organizer=nok, location=old.location, title=old.title,
+        start_datetime=now + timedelta(days=3), end_datetime=now + timedelta(days=4),
+        participant_capacity=4)
+    call_command("demo_checkin_trip")
+    assert not Trip.objects.filter(pk=old.pk).exists()
+    assert Trip.objects.filter(pk=other.pk).exists()

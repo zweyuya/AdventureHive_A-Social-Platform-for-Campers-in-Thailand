@@ -56,8 +56,8 @@ def test_complete_trips_command(finished_trip, make_trip):
 @pytest.mark.django_db
 def test_complete_trips_is_idempotent(finished_trip):
     trip, _ = finished_trip
-    assert services.complete_finished_trips() == {"completed": 1, "cancelled_drafts": 0}
-    assert services.complete_finished_trips() == {"completed": 0, "cancelled_drafts": 0}
+    assert services.complete_finished_trips() == {"completed": 1, "cancelled_drafts": 0, "recap_reminders": 0}
+    assert services.complete_finished_trips() == {"completed": 0, "cancelled_drafts": 0, "recap_reminders": 0}
 
 
 # ---------------- Attendance -------------------------------------------------------

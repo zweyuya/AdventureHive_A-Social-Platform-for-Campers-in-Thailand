@@ -1,4 +1,4 @@
-from django.db.models import Exists, OuterRef, Q
+from django.db.models import Count, Exists, OuterRef, Q
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from drf_spectacular.utils import OpenApiParameter, OpenApiTypes, extend_schema
@@ -14,9 +14,12 @@ from communities.models import GroupMember
 
 from . import services
 from .filters import TripFilter
+from .models import ParticipantStatus as PS
 from .models import Trip, TripEquipmentItem, TripParticipant, TripStatus
 from .permissions import IsOrganizer, IsOrganizerOrStaff
 from .serializers import (
+    AppealSerializer,
+    OrganisedTripSerializer,
     AttendanceSerializer,
     CheckInCodeSerializer,
     CheckInSerializer,
@@ -212,6 +215,10 @@ class TripViewSet(viewsets.ModelViewSet):
         """Organizer only. Show this code at the meeting point / during the trip."""
         trip = self.get_object()
         opens, closes = services.checkin_window(trip)
+        if not services.checkin_is_open(trip):
+            raise services.TripError(
+                f"The check-in code is available from {timezone.localtime(opens):%d %b %H:%M} "
+                f"until {timezone.localtime(closes):%d %b %H:%M}.")
         return Response(CheckInCodeSerializer({
             "code": services.checkin_code(trip), "opens_at": opens, "closes_at": closes,
             "is_open": services.checkin_is_open(trip)}).data)
@@ -225,6 +232,16 @@ class TripViewSet(viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
         participant = services.check_in(trip, request.user, serializer.validated_data["code"])
         return Response({"checked_in_at": participant.checked_in_at})
+
+    @extend_schema(request=AppealSerializer, responses={201: AppealSerializer})
+    @action(detail=True, methods=["post"], url_path="attendance-appeal")
+    def attendance_appeal(self, request, pk=None):
+        """A participant marked as a no-show says they were there. An admin decides."""
+        trip = self.get_object()
+        serializer = AppealSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        appeal = services.submit_appeal(trip, request.user, serializer.validated_data["reason"])
+        return Response(AppealSerializer(appeal).data, status=status.HTTP_201_CREATED)
 
     @extend_schema(request=None, responses={200: None})
     @action(detail=True, methods=["post", "delete"], url_path="emergency-sharing")
@@ -240,6 +257,18 @@ class TripViewSet(viewsets.ModelViewSet):
         """Organizer only, around the trip dates. Each read is logged; people are notified."""
         rows = services.read_emergency_contacts(self.get_object(), request.user)
         return Response(SharedEmergencyContactSerializer(rows, many=True).data)
+
+    @extend_schema(responses=OrganisedTripSerializer(many=True))
+    @action(detail=False, methods=["get"])
+    def organised(self, request):
+        """The organizer's dashboard: every trip I organise, newest first, with what needs doing."""
+        qs = (Trip.objects.filter(organizer=request.user)
+              .select_related("location", "organizer__profile")
+              .annotate(waitlist_count=Count("participants", filter=Q(participants__status=PS.WAITLISTED), distinct=True),
+                        n_unmarked=Count("participants", filter=Q(participants__status=PS.CONFIRMED), distinct=True),
+                        open_appeals=Count("participants__appeal", filter=Q(participants__appeal__status="open"), distinct=True))
+              .order_by("-start_datetime"))
+        return Response(OrganisedTripSerializer(qs, many=True, context=self.get_serializer_context()).data)
 
     @extend_schema(responses=TripListSerializer(many=True))
     @action(detail=False, methods=["get"])

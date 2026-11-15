@@ -12,6 +12,15 @@ class NotificationType(models.TextChoices):
     TRIP_REMINDER = "trip_reminder", "Trip reminder"
     REVIEW_UNLOCKED = "review_unlocked", "You can now review this campsite"
     EMERGENCY_CONTACT_VIEWED = "emergency_contact_viewed", "Organizer viewed your emergency contact"
+    APPEAL_ON_MY_TRIP = "appeal_on_my_trip", "A participant appealed a no-show on your trip"
+    RECAP_REMINDER = "recap_reminder", "Share a recap of your trip"
+    TRIP_REPEATED = "trip_repeated", "A trip you joined is running again"
+    APPEAL_APPROVED = "appeal_approved", "Your no-show appeal was approved"
+    APPEAL_REJECTED = "appeal_rejected", "Your no-show appeal was not approved"
+    # For admins
+    TRIP_FLAGGED = "trip_flagged", "Trip flagged for admin review"
+    REVIEW_ESCALATED = "review_escalated", "Review has several open reports"
+    APPEAL_SUBMITTED = "appeal_submitted", "No-show appeal waiting for a decision"
     # Content workflow
     SUBMISSION_APPROVED = "submission_approved", "Campsite submission approved"
     SUBMISSION_REJECTED = "submission_rejected", "Campsite submission rejected"
@@ -37,6 +46,7 @@ class ReferenceType(models.TextChoices):
     COMMENT = "comment", "Comment"
     USER = "user", "User"
     GROUP = "group", "Group"
+    REVIEW = "review", "Review"
 
 
 class Notification(models.Model):

@@ -16,7 +16,7 @@ from rest_framework.exceptions import PermissionDenied, ValidationError
 from notifications.models import NotificationType, ReferenceType
 from notifications.services import notify
 
-from .models import Answer, AnswerStatus, Question, QuestionStatus
+from .models import Answer, AnswerStatus, AnswerVote, Question, QuestionStatus
 
 ANSWERABLE = (QuestionStatus.OPEN, QuestionStatus.ANSWERED)
 
@@ -123,3 +123,18 @@ def set_answer_hidden(answer: Answer, hidden: bool) -> Answer:
                 question.status = QuestionStatus.OPEN
             question.save(update_fields=["accepted_answer", "status"])
     return answer
+
+
+@transaction.atomic
+def vote_answer(answer: Answer, user, helpful: bool) -> int:
+    """Mark (or unmark) an answer as helpful. Returns the new number of votes."""
+    answer = Answer.objects.select_for_update().get(pk=answer.pk)
+    if answer.author_id == user.pk:
+        raise QAError("You can't vote for your own answer.")
+    if answer.status != AnswerStatus.PUBLISHED:
+        raise QAError("This answer is hidden.")
+    if helpful:
+        AnswerVote.objects.get_or_create(answer=answer, user=user)
+    else:
+        AnswerVote.objects.filter(answer=answer, user=user).delete()
+    return answer.votes.count()

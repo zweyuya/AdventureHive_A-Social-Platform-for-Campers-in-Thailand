@@ -17,17 +17,20 @@ from datetime import timedelta
 from decimal import ROUND_HALF_UP, Decimal
 
 from django.db import IntegrityError, transaction
-from django.db.models import Avg, Count, Subquery
+from django.db.models import Avg, Count, F, Q, Subquery
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
 from locations.models import Location
+from notifications.models import NotificationType, ReferenceType
+from notifications.services import notify_admins
 from trips.models import ParticipantStatus as PS
 from trips.models import FlagStatus, Trip, TripParticipant, TripStatus
 
 from .models import HiddenReason, Review, ReviewReport, ReviewStatus, ReportStatus
 
 REVIEW_WINDOW = timedelta(days=30)
+REPORT_ESCALATION = 3  # this many open reports: top of the moderation queue, admins notified
 
 
 class ReviewError(ValidationError):
@@ -75,7 +78,8 @@ def review_eligibility(trip, user) -> str | None:
 
 
 @transaction.atomic
-def create_review(user, trip, rating: int, review_text: str = "") -> Review:
+def create_review(user, trip, rating: int, review_text: str = "",
+                  organizer_rating: int | None = None) -> Review:
     Location.objects.select_for_update().get(pk=trip.location_id)  # serialise rating updates
     reason = review_eligibility(trip, user)
     if reason:
@@ -83,7 +87,8 @@ def create_review(user, trip, rating: int, review_text: str = "") -> Review:
     try:
         with transaction.atomic():
             review = Review.objects.create(trip=trip, user=user, location_id=trip.location_id,
-                                           rating=rating, review_text=review_text)
+                                           rating=rating, review_text=review_text,
+                                           organizer_rating=organizer_rating)
     except IntegrityError as exc:  # trigger / unique constraint as last line of defence
         raise ReviewError("This review is not allowed.") from exc
     recalculate_rating(trip.location_id)
@@ -98,7 +103,7 @@ def update_review(review: Review, data: dict) -> Review:
     if timezone.now() > review.trip.end_datetime + REVIEW_WINDOW:
         raise ReviewError(f"Reviews can only be edited within {REVIEW_WINDOW.days} days "
                           f"after the trip.")
-    for field in ("rating", "review_text"):
+    for field in ("rating", "review_text", "organizer_rating"):
         if field in data:
             setattr(review, field, data[field])
     review.edited_at = timezone.now()
@@ -128,7 +133,9 @@ def set_review_status(review: Review, status: str, reason: str = HiddenReason.MO
 # --------------------------------------------------------------------------
 # Reports (members flag a review, a moderator decides)
 # --------------------------------------------------------------------------
+@transaction.atomic
 def report_review(review: Review, user, reason: str, details: str = "") -> ReviewReport:
+    review = Review.objects.select_for_update().get(pk=review.pk)  # so only one report is the third
     if review.user_id == user.pk:
         raise ReviewError("You cannot report your own review.")
     if review.status != ReviewStatus.PUBLISHED:
@@ -137,6 +144,8 @@ def report_review(review: Review, user, reason: str, details: str = "") -> Revie
         review=review, reporter=user, defaults={"reason": reason, "details": details[:2000]})
     if not created:
         raise ReviewError("You have already reported this review.")
+    if review.reports.filter(status=ReportStatus.OPEN).count() == REPORT_ESCALATION:
+        notify_admins(NotificationType.REVIEW_ESCALATED, ReferenceType.REVIEW, review.pk)
     return report
 
 
@@ -179,3 +188,50 @@ def clear_trip_flag(trip, moderator) -> int:
         set_review_status(review, ReviewStatus.PUBLISHED)
         restored += 1
     return restored
+
+
+# --------------------------------------------------------------------------
+# Organizer stats (shown on the trip page and the organizer's profile)
+# --------------------------------------------------------------------------
+MIN_ATTENDEES = 2           # a trip with fewer people at it does not count
+MIN_ORGANIZER_RATERS = 3    # no average is shown until this many different people rated
+
+
+def counted_trips(organizer):
+    """
+    Trips that count toward an organizer's record. Hard to fake on purpose:
+    completed (not planned or cancelled), not flagged as suspicious by the system or an
+    admin, at least 2 attendees, and at least half of them checked in with the trip code
+    (so the organizer's word alone is not enough).
+    """
+    attended = Q(participants__status=PS.ATTENDED)
+    return (Trip.objects.filter(organizer=organizer, status=TripStatus.COMPLETED)
+            .exclude(flag_status__in=[FlagStatus.NEEDS_REVIEW, FlagStatus.REVIEWS_HIDDEN])
+            .annotate(n_attended=Count("participants", filter=attended),
+                      n_checked_in=Count("participants",
+                                         filter=attended & Q(participants__checked_in_at__isnull=False)))
+            .filter(n_attended__gte=MIN_ATTENDEES, n_checked_in__gte=F("n_attended") / 2.0))
+
+
+def organizer_stats(organizer) -> dict:
+    trips = counted_trips(organizer)
+    trip_ids = list(trips.values_list("pk", flat=True))
+    campers = (TripParticipant.objects.filter(trip_id__in=trip_ids, status=PS.ATTENDED)
+               .values("user_id").distinct().count())
+    # Each person counts once: their newest organizer rating for this organizer.
+    newest = (Review.objects.filter(trip_id__in=trip_ids, status=ReviewStatus.PUBLISHED,
+                                    organizer_rating__isnull=False)
+              .order_by("user_id", "-created_at").distinct("user_id").values("id"))
+    rated = Review.objects.filter(id__in=Subquery(newest)).aggregate(
+        avg=Avg("organizer_rating"), n=Count("id"))
+    shown = rated["n"] >= MIN_ORGANIZER_RATERS
+    return {
+        "trips_run": len(trip_ids),
+        "campers": campers,
+        # Cancelled after people had joined (cancelling an empty draft is not held against anyone).
+        "cancelled": Trip.objects.filter(organizer=organizer, status=TripStatus.CANCELLED,
+                                         participants__isnull=False).distinct().count(),
+        "rating": round(float(rated["avg"]), 1) if shown else None,
+        "rating_count": rated["n"],
+        "min_ratings": MIN_ORGANIZER_RATERS,
+    }

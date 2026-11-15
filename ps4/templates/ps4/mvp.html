@@ -1,0 +1,33 @@
+{% extends "ps4/base.html" %}
+{% block title %}Revised MVP{% endblock %}
+{% block content %}
+<h1>Revised MVP</h1>
+<p class="lead">How the research changed our plan, and what we are building this semester.</p>
+
+<h2>Evidence to decision</h2>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th scope="col">User evidence</th><th scope="col">Implication</th><th scope="col">Decision</th><th scope="col">Rationale</th></tr></thead>
+    <tbody>
+      {% for d in decisions %}
+      <tr><td>{{ d.evidence }}</td><td>{{ d.implication }}</td>
+        <td><span class="pill {% if d.decision == 'Remove' or d.decision == 'Defer' %}navy{% elif d.decision == 'Keep' %}{% else %}sun{% endif %}">{{ d.decision }}</span></td>
+        <td>{{ d.rationale }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<h2>MVP features in priority order</h2>
+<div class="card">
+  <ol class="steps">{% for name, desc in mvp_features %}<li><strong>{{ name }}:</strong> {{ desc }}</li>{% endfor %}</ol>
+</div>
+
+<h2>Out of scope this semester</h2>
+<div class="card"><ul class="clean">{% for item in out_of_scope %}<li>{{ item }}</li>{% endfor %}</ul></div>
+
+<h2>Changes from the original proposal</h2>
+<div class="card"><p style="margin:0">{{ changes }}</p></div>
+
+<div class="actions"><a class="btn ghost" href="{% url 'ps4:index' %}">Back to PS4 index</a></div>
+{% endblock %}

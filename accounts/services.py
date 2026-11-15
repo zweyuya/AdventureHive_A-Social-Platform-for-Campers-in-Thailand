@@ -45,6 +45,7 @@ def delete_account(user: User) -> None:
     user.deleted_at = now
     user.is_staff = False
     user.is_superuser = False
+    user.is_moderator = False
     user.save()
 
     profile = getattr(user, "profile", None)

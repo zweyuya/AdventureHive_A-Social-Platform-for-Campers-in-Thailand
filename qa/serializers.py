@@ -1,3 +1,4 @@
+from django.db.models import Count
 from rest_framework import serializers
 
 from core.people import person as _person
@@ -10,12 +11,23 @@ from .models import Answer, AnswerStatus, Question
 class AnswerSerializer(serializers.ModelSerializer):
     author = serializers.SerializerMethodField()
     is_accepted = serializers.SerializerMethodField()
+    helpful_count = serializers.SerializerMethodField(help_text="Members who found it helpful.")
+    i_found_helpful = serializers.SerializerMethodField()
 
     class Meta:
         model = Answer
-        fields = ["id", "question", "body", "author", "is_accepted", "status",
-                  "created_at", "edited_at"]
+        fields = ["id", "question", "body", "author", "is_accepted", "helpful_count",
+                  "i_found_helpful", "status", "created_at", "edited_at"]
         read_only_fields = fields
+
+    def get_helpful_count(self, obj) -> int:
+        return obj.n_votes if hasattr(obj, "n_votes") else obj.votes.count()
+
+    def get_i_found_helpful(self, obj) -> bool:
+        request = self.context.get("request")
+        if not (request and request.user.is_authenticated):
+            return False
+        return obj.votes.filter(user=request.user).exists()
 
     def get_author(self, obj) -> dict:
         return _person(obj.author)
@@ -56,10 +68,12 @@ class QuestionDetailSerializer(QuestionListSerializer):
 
     def get_answers(self, obj) -> list:
         user = self.context["request"].user
-        qs = obj.answers.select_related("author__profile", "question").order_by("created_at")
+        # Accepted answer first, then the most helpful, then the oldest.
+        qs = obj.answers.select_related("author__profile", "question").annotate(n_votes=Count("votes"))
+        qs = sorted(qs, key=lambda a: (a.pk != obj.accepted_answer_id, -a.n_votes, a.created_at))
         if not (user.is_authenticated and user.is_staff):
-            qs = qs.filter(status=AnswerStatus.PUBLISHED)
-        return AnswerSerializer(qs, many=True).data
+            qs = [a for a in qs if a.status == AnswerStatus.PUBLISHED]
+        return AnswerSerializer(qs, many=True, context=self.context).data
 
     def get_last_edited_by(self, obj) -> dict | None:
         return _person(obj.last_edited_by) if obj.last_edited_by_id else None
@@ -70,6 +84,8 @@ class QuestionWriteSerializer(serializers.ModelSerializer):
         queryset=Location.objects.published(), source="location",
         required=False, allow_null=True,
         help_text="Published campsite this question is about (optional).",
+        error_messages={"does_not_exist": "Questions can only be asked about campsites a moderator "
+                                          "has checked. This one isn't verified yet."},
     )
 
     class Meta:

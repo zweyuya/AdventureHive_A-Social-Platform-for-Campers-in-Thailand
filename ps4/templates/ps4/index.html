@@ -1,0 +1,82 @@
+{% extends "ps4/base.html" %}
+{% block title %}PS4 index{% endblock %}
+{% block crumbs %}{% endblock %}
+{% block hero %}
+<section class="hero">
+  <div class="wrap">
+    <span class="pill">FSAD 2026 · Problem Set 3 · User research</span>
+    <h1>{{ project.name }}: who we're building for</h1>
+    <p class="lead">{{ project.summary }}</p>
+    <p class="lead small">Based on {{ participants|length }} interview{{ participants|length|pluralize }} with potential users ({% for p in participants %}{{ p.code }}{% if not forloop.last %}, {% endif %}{% endfor %}).</p>
+  </div>
+</section>
+{% endblock %}
+{% block content %}
+<h2 id="personas">Personas</h2>
+<p class="muted">Fictional composites built from the interview findings. Select a persona to see their profile and usage scenario.</p>
+<div class="grid">
+  {% for p in personas %}
+  <a class="card persona-card" href="{% url 'ps4:persona' p.slug %}">
+    <div class="row">
+      <div class="avatar" style="background:{{ p.color }}" aria-hidden="true">{{ p.initials }}</div>
+      <div>
+        <h3>{{ p.name }}</h3>
+        <span class="muted small">{{ p.role }}</span>
+      </div>
+    </div>
+    <blockquote class="small">“{{ p.quote }}”</blockquote>
+    <div>{% if p.primary %}<span class="pill sun">Primary user</span> {% endif %}<span class="pill">View profile →</span></div>
+  </a>
+  {% endfor %}
+</div>
+
+<h2 id="scenarios">Usage scenarios</h2>
+<div class="card">
+  <ul class="clean">
+    {% for s in scenarios %}
+    <li><a href="{% url 'ps4:scenario' s.slug %}"><strong>Scenario {{ s.number }}:</strong> {{ s.title }}</a>
+      {% if s.mobile %} <span class="pill sun">Mobile</span>{% endif %}</li>
+    {% endfor %}
+  </ul>
+</div>
+
+<h2>Research results</h2>
+<div class="grid">
+  <a class="card persona-card" href="{% url 'ps4:findings' %}">
+    <h3>High-level findings</h3>
+    <p class="muted small" style="margin:0">What participants told us, where they disagreed, and open questions.</p>
+  </a>
+  <a class="card persona-card" href="{% url 'ps4:requirements' %}">
+    <h3>Permissions and requirements</h3>
+    <p class="muted small" style="margin:0">Role and permission matrix, user stories with acceptance criteria, and data/privacy notes.</p>
+  </a>
+  <a class="card persona-card" href="{% url 'ps4:mvp' %}">
+    <h3>Revised MVP</h3>
+    <p class="muted small" style="margin:0">How the research changed the plan, and the features in priority order.</p>
+  </a>
+  <a class="card persona-card" href="{% url 'ps4:prototype' %}">
+    <h3>Clickable prototype</h3>
+    <p class="muted small" style="margin:0">The screens participants used for the feedback tasks: join a trip, find a beginner trip, record attendance.</p>
+  </a>
+</div>
+
+<h2>Project plan summary</h2>
+<div class="card">
+  <dl class="profile">
+    {% for label, text in project.plan %}<dt>{{ label }}</dt><dd>{{ text }}</dd>{% endfor %}
+  </dl>
+</div>
+
+<h2>Participants</h2>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th scope="col">Code</th><th scope="col">User class</th><th scope="col">Mode</th><th scope="col">Duration</th></tr></thead>
+    <tbody>
+      {% for p in participants %}<tr><td><strong>{{ p.code }}</strong></td><td>{{ p.user_class }}</td><td>{{ p.mode }}</td><td>{{ p.duration }}</td></tr>{% endfor %}
+    </tbody>
+  </table>
+</div>
+<p class="muted small">Participants were recruited from the team's contacts. Only codes and user classes are shown.</p>
+
+<div class="actions"><a class="btn" href="/">Open the AdventureHive app</a></div>
+{% endblock %}

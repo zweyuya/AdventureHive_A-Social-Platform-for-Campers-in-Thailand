@@ -36,19 +36,22 @@ def _names(res):
 # ---------------- List & filters ---------------------------------------------
 
 @pytest.mark.django_db
-def test_list_is_public_and_shows_only_published(api_client, sites):
+def test_list_is_public_and_hides_drafts(api_client, sites):
+    # Published, plus "Secret Spot" waiting for a moderator ("Not yet verified"); never the draft
     res = api_client.get("/api/campsites/")
     assert res.status_code == 200
-    assert _names(res) == ["Chiang Dao Ridge", "Inthanon Camp", "Lam Ta Khong"]
-    assert res.json()["count"] == 3
+    assert _names(res) == ["Chiang Dao Ridge", "Inthanon Camp", "Lam Ta Khong", "Secret Spot"]
+    assert res.json()["count"] == 4
+    assert _names(api_client.get("/api/campsites/?verified=true")) == \
+        ["Chiang Dao Ridge", "Inthanon Camp", "Lam Ta Khong"]
 
 
 @pytest.mark.django_db
 @pytest.mark.parametrize("query, expected", [
-    ("province=chiang mai", ["Chiang Dao Ridge", "Inthanon Camp"]),          # case-insensitive
+    ("province=chiang mai", ["Chiang Dao Ridge", "Inthanon Camp", "Secret Spot"]),  # case-insensitive
     ("category=backcountry", ["Chiang Dao Ridge"]),
     ("category=backcountry&category=campground",
-     ["Chiang Dao Ridge", "Inthanon Camp", "Lam Ta Khong"]),
+     ["Chiang Dao Ridge", "Inthanon Camp", "Lam Ta Khong", "Secret Spot"]),
     ("has_restrooms=true", ["Inthanon Camp", "Lam Ta Khong"]),
     ("has_restrooms=true&has_water_source=true", ["Inthanon Camp"]),
     ("fire_pit_allowed=true", ["Lam Ta Khong"]),
@@ -81,11 +84,13 @@ def test_detail_includes_authority_and_permit_info(api_client):
 
 
 @pytest.mark.django_db
-def test_unpublished_detail_hidden_from_public_and_other_members(api_client, login, make_user, sites):
-    url = f"/api/campsites/{sites['pending'].pk}/"
+def test_draft_detail_hidden_from_public_and_other_members(api_client, login, make_user, sites):
+    url = f"/api/campsites/{sites['draft'].pk}/"
     assert api_client.get(url).status_code == 404
     login(make_user())
     assert api_client.get(url).status_code == 404
+    # One waiting for a moderator is visible, as "Not yet verified"
+    assert api_client.get(f"/api/campsites/{sites['pending'].pk}/").json()["status"] == "pending_review"
 
 
 # ---------------- GeoJSON map ---------------------------------------------------
@@ -94,12 +99,13 @@ def test_unpublished_detail_hidden_from_public_and_other_members(api_client, log
 def test_geojson_is_valid_and_filtered(api_client, sites):
     body = api_client.get("/api/map/campsites/").json()
     assert body["type"] == "FeatureCollection"
-    assert len(body["features"]) == 3  # published only
+    assert len(body["features"]) == 4  # published + waiting for a moderator, never drafts
+    assert {f["properties"]["name"]: f["properties"]["verified"] for f in body["features"]}["Secret Spot"] is False
     feature = next(f for f in body["features"] if f["properties"]["name"] == "Lam Ta Khong")
     assert feature["type"] == "Feature"
     assert feature["geometry"] == {"type": "Point", "coordinates": [101.38, 14.43]}  # [lng, lat]
     assert set(feature["properties"]) == {"id", "name", "category", "province", "avg_rating",
-                                       "cover_image"}
+                                       "cover_image", "verified"}
 
     filtered = api_client.get("/api/map/campsites/?province=Nakhon Ratchasima").json()
     assert [f["properties"]["name"] for f in filtered["features"]] == ["Lam Ta Khong"]

@@ -12,6 +12,14 @@ MESSAGES = {
     T.REVIEW_UNLOCKED: "Thanks for coming on {trip}! You can now review the campsite.",
     T.EMERGENCY_CONTACT_VIEWED: "{actor} (organizer of {trip}) opened the emergency contact "
                                 "you shared.",
+    T.APPEAL_ON_MY_TRIP: "{actor} appealed their no-show on {trip}. An admin will decide.",
+    T.APPEAL_APPROVED: "Your no-show appeal for {trip} was approved. You can now review the campsite.",
+    T.APPEAL_REJECTED: "Your no-show appeal for {trip} was not approved. See the note on the trip page.",
+    T.RECAP_REMINDER: "How was {trip}? Share a few photos or a short recap in the trip posts.",
+    T.TRIP_REPEATED: "{actor} is running {trip} again. You came last time, so you can join first.",
+    T.TRIP_FLAGGED: "{trip} was flagged: attendees were marked attended without checking in.",
+    T.REVIEW_ESCALATED: "A review of {location} has several open reports.",
+    T.APPEAL_SUBMITTED: "{actor} appealed a no-show on {trip}. An admin needs to decide.",
     T.SUBMISSION_APPROVED: "Your campsite change for {location} was approved.",
     T.SUBMISSION_REJECTED: "Your campsite change for {location} needs changes.",
     T.ANSWER_POSTED: "Someone answered your question: {question}",
@@ -24,6 +32,14 @@ MESSAGES = {
     T.POST_PENDING: "{actor} posted in {group} — waiting for your approval.",
     T.POST_APPROVED: "Your post in {group} was approved.",
     T.POST_REJECTED: "Your post in {group} wasn't approved. See the note from the admin.",
+}
+
+
+# Notifications for admins open the Django admin instead of a page in the app.
+ADMIN_ROUTES = {
+    T.TRIP_FLAGGED: "/admin/trips/trip/{}/change/",
+    T.REVIEW_ESCALATED: "/admin/reviews/review/{}/change/",
+    T.APPEAL_SUBMITTED: "/admin/trips/attendanceappeal/",
 }
 
 
@@ -49,6 +65,8 @@ class NotificationSerializer(serializers.ModelSerializer):
         return template.format(trip=name, location=name, question=name, actor=actor, group=group)
 
     def get_link(self, obj) -> str | None:
+        if obj.type in ADMIN_ROUTES:
+            return ADMIN_ROUTES[obj.type].format(obj.reference_id)
         routes = {R.TRIP: "/trips/{}", R.LOCATION: "/campsites/{}",
                   R.QUESTION: "/questions/{}", R.GROUP: "/groups/{}", R.USER: "/users/{}",
                   R.POST: "/posts/{}"}

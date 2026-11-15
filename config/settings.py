@@ -51,6 +51,7 @@ INSTALLED_APPS = [
     "qa",
     "social",
     "notifications",
+    "ps4",  # public user-research pages (Problem Set 3)
 ]
 
 MIDDLEWARE = [
@@ -136,6 +137,7 @@ REST_FRAMEWORK = {
         "checkin": "5/min",  # trip check-in code guesses (a 6-digit code can't be brute-forced)
         "report": "10/min",  # review reports
         "auth": "10/min",    # login / register
+        "campsite_submit": "10/day",  # unchecked campsites are public, so limit submissions
     },
 }
 

@@ -149,9 +149,10 @@ class Command(BaseCommand):
              "reason": "His phone battery died; he camped with us both nights."},
             {"user_id": u["Jee"].pk, "status": "no_show"},
         ])
-        reviews.create_review(u["Nok"], past, 5, "Incredible sunrise and a very well organised trip.")
-        reviews.create_review(u["Mint"], past, 4, "Clean restrooms, a bit windy at night.")
-        reviews.create_review(u["Tono"], past, 4, "Great cliff views. Bring a power bank!")
+        # The last number rates Ploy as the organizer (3 ratings, so Ploy's average is shown).
+        reviews.create_review(u["Nok"], past, 5, "Incredible sunrise and a very well organised trip.", 5)
+        reviews.create_review(u["Mint"], past, 4, "Clean restrooms, a bit windy at night.", 4)
+        reviews.create_review(u["Tono"], past, 4, "Great cliff views. Bring a power bank!", 5)
 
         # ---- a trip that ended 2 hours ago: live check-in + attendance demo -------------
         # (re-create a fresh one on presentation day: python manage.py demo_checkin_trip)
@@ -173,6 +174,23 @@ class Command(BaseCommand):
                                 title="Are campfires allowed?", body="Thinking of a BBQ.")
 
         call_command("seed_demo_posts", stdout=self.stdout)
+
+        # ---- moderation: a moderator, and two submissions waiting for a decision ------
+        moderator = User.objects.create_user(email=f"kai@{DOMAIN}", password=PASSWORD,
+                                             pdpa_consent_at=timezone.now(), is_moderator=True)
+        moderator.profile.display_name = "Kai"
+        moderator.profile.save()
+        # Palm's pin is a few hundred metres from Lam Ta Khong: a possible duplicate.
+        Location.objects.create(
+            name="Lam Ta Khong Riverside Camp", province="Nakhon Ratchasima", latitude=14.432,
+            longitude=101.387, category="campground", created_by=u["Palm"], status="pending_review",
+            description="Grassy camp by the stream in Khao Yai. Water and toilets nearby.",
+            has_water_source=True, has_restrooms=True)
+        Location.objects.create(
+            name="Mae Ngat Lakeside Camp", province="Chiang Mai", latitude=19.16, longitude=99.04,
+            category="campground", created_by=u["Tono"], status="pending_review",
+            description="Quiet lakeside camping above the Mae Ngat dam. Bring your own water.",
+            fire_pit_allowed=True)
 
         self.stdout.write(self.style.SUCCESS(
             f"Demo data created. Log in as nok@{DOMAIN} (or ploy, mint, palm, tono, june, "

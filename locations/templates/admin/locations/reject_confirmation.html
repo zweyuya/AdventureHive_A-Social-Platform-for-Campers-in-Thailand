@@ -1,7 +1,6 @@
 {% extends "admin/base_site.html" %}
 {% block content %}
-<h1>{{ title }}</h1>
-<p>The following item(s) will be rejected. The reason is shown to the submitter so they can fix and resubmit.</p>
+<p>{{ intro|default:"The following item(s) will be rejected. The reason is shown to the submitter so they can fix and resubmit." }}</p>
 <ul>{% for obj in objects %}<li>{{ obj }}</li>{% endfor %}</ul>
 <form method="post">{% csrf_token %}
   {{ form.as_p }}

@@ -1,0 +1,42 @@
+{% extends "ps4/base.html" %}
+{% block title %}{{ persona.name }}, {{ persona.role|lower }}{% endblock %}
+{% block content %}
+<div class="row" style="margin-top:8px">
+  <div class="avatar" style="background:{{ persona.color }};width:72px;height:72px;font-size:1.8rem" aria-hidden="true">{{ persona.initials }}</div>
+  <div>
+    <span class="pill navy">Persona</span>{% if persona.primary %} <span class="pill sun">Primary user</span>{% endif %}
+    <h1>{{ persona.name }}, {{ persona.role|lower }}</h1>
+  </div>
+</div>
+<blockquote style="margin-top:12px">“{{ persona.quote }}”</blockquote>
+
+<h2>Profile</h2>
+<div class="card">
+  <dl class="profile">
+    {% for label, text in persona.rows %}<dt>{{ label }}</dt><dd>{{ text }}</dd>{% endfor %}
+  </dl>
+</div>
+
+<h2>Usage scenario</h2>
+<a class="card persona-card" href="{% url 'ps4:scenario' scenario.slug %}">
+  <span class="muted small">Scenario {{ scenario.number }}{% if scenario.mobile %} · Mobile{% endif %}</span>
+  <h3>{{ scenario.title }} →</h3>
+  <p class="muted small" style="margin:0">{{ scenario.trigger }}</p>
+</a>
+
+<h2>What this persona is based on</h2>
+<div class="card">
+  {% if persona_findings %}
+  <ul class="clean">
+    {% for f in persona_findings %}<li><strong>{{ f.id }} · {{ f.title }}.</strong> <span class="muted">{{ f.evidence }}</span></li>{% endfor %}
+  </ul>
+  {% endif %}
+  <p class="muted small" style="margin:{% if persona_findings %}12px{% else %}0{% endif %} 0 0">{{ persona.evidence_note }} See all <a href="{% url 'ps4:findings' %}">findings</a>.</p>
+</div>
+<p class="muted small">{{ persona.name }} is a fictional composite, not a real participant.</p>
+
+<div class="actions">
+  <a class="btn" href="{% url 'ps4:scenario' scenario.slug %}">Read the scenario</a>
+  <a class="btn ghost" href="{% url 'ps4:index' %}">Back to PS4 index</a>
+</div>
+{% endblock %}

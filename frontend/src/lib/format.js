@@ -32,3 +32,8 @@ export const LEVELS = ["beginner", "intermediate", "advanced", "expert"];
 export const DIFFICULTIES = ["easy", "moderate", "difficult", "strenuous"];
 export const CAMPSITE_CATEGORIES = ["campsite", "campground", "backcountry", "other"];
 export const GROUP_CATEGORIES = ["car_camping", "backpacking", "family_camping", "van_life", "general"];
+
+/** Split free text into items (fees by "·", ";" or new lines; rules by new lines). */
+export const splitList = (text, sep = /\n+/) => (text || "").split(sep).map((s) => s.trim()).filter(Boolean);
+/** Permit information checked more than a year ago may be out of date. */
+export const isStale = (checkedAt, now = Date.now()) => Boolean(checkedAt) && now - new Date(checkedAt).getTime() > 365 * 864e5;

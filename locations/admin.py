@@ -39,7 +39,7 @@ def _run(modeladmin, request, queryset, fn, success_msg):
         modeladmin.message_user(request, success_msg.format(n=done), messages.SUCCESS)
 
 
-def _reject_with_note(modeladmin, request, queryset, fn, title):
+def _reject_with_note(modeladmin, request, queryset, fn, title, intro=None):
     """Intermediate page: ask for the rejection reason, then reject."""
     if "apply" in request.POST:
         form = RejectForm(request.POST)
@@ -52,6 +52,7 @@ def _reject_with_note(modeladmin, request, queryset, fn, title):
     return TemplateResponse(request, "admin/locations/reject_confirmation.html", {
         **modeladmin.admin_site.each_context(request),
         "title": title,
+        "intro": intro,
         "objects": queryset,
         "form": form,
         "action": request.POST.get("action"),
@@ -124,7 +125,7 @@ class LocationAdmin(admin.ModelAdmin):
                                   "Commons) and fill in the credit."}),
         ("Facilities", {"fields": ("has_water_source", "has_restrooms", "fire_pit_allowed")}),
         ("Permits & rules", {"fields": ("authority", "permit_status", "permit_details",
-                                        "permit_booking_url", "rules", "permit_info_source",
+                                        "fees", "permit_booking_url", "rules", "permit_info_source",
                                         "permit_info_verified_at")}),
         ("Ratings", {"fields": ("avg_rating", "review_count", "created_at", "updated_at")}),
     )

@@ -76,3 +76,22 @@ class Answer(models.Model):
 
     def __str__(self):
         return f"Answer to '{self.question}' by {self.author}"
+
+
+class AnswerVote(models.Model):
+    """A member marks an answer as helpful. One per person per answer; not on your own."""
+
+    answer = models.ForeignKey(Answer, on_delete=models.CASCADE, related_name="votes")
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="answer_votes"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "answer_votes"
+        constraints = [
+            models.UniqueConstraint(fields=["answer", "user"], name="answer_votes_once"),
+        ]
+
+    def __str__(self):
+        return f"{self.user} found answer {self.answer_id} helpful"

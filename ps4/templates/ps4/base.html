@@ -1,0 +1,126 @@
+{% load static %}<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}User research{% endblock %} · {{ project.name }}</title>
+  <meta name="description" content="{{ project.name }} user research: personas, scenarios, findings and MVP (FSAD Problem Set 3).">
+  <link rel="icon" href="{% static 'ps4/logo-mark.png' %}">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --forest: #178a5e; --forest-700: #0f6647; --forest-50: #ecf6f1; --forest-100: #d3eadf;
+      --sunrise: #f58a1f; --sunrise-100: #fff0dd; --navy: #142659; --navy-900: #0e1c44;
+      --ink: #1d2b36; --muted: #5b6b78; --line: #e3eae6; --mist: #f4f8f6; --card: #fff;
+      --shadow: 0 1px 2px rgba(14,28,68,.06), 0 4px 16px rgba(14,28,68,.05);
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: "Plus Jakarta Sans", system-ui, sans-serif; color: var(--ink);
+           background: var(--mist); line-height: 1.6; font-size: 16px; }
+    a { color: var(--forest-700); }
+    a:hover { color: var(--forest); }
+    a:focus-visible, button:focus-visible { outline: 3px solid var(--sunrise); outline-offset: 2px; border-radius: 4px; }
+    .wrap { max-width: 1040px; margin: 0 auto; padding: 0 16px; }
+    header.site { background: var(--card); border-bottom: 1px solid var(--line); }
+    header.site .wrap { display: flex; align-items: center; gap: 12px; min-height: 64px; flex-wrap: wrap; }
+    .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--navy-900); font-weight: 800; font-size: 1.15rem; }
+    .brand img { width: 36px; height: 36px; }
+    .brand small { display: block; font-weight: 600; font-size: .75rem; color: var(--muted); letter-spacing: .02em; }
+    header.site nav { margin-left: auto; display: flex; gap: 4px; flex-wrap: wrap; }
+    header.site nav a { text-decoration: none; color: var(--ink); font-weight: 600; font-size: .9rem; padding: 6px 10px; border-radius: 8px; }
+    header.site nav a:hover, header.site nav a[aria-current="page"] { background: var(--forest-50); color: var(--forest-700); }
+    .crumbs { font-size: .875rem; color: var(--muted); margin: 20px 0 4px; }
+    .crumbs a { font-weight: 600; text-decoration: none; }
+    h1 { font-size: clamp(1.6rem, 4vw, 2.3rem); line-height: 1.2; color: var(--navy-900); margin: 4px 0 8px; font-weight: 800; }
+    h2 { font-size: 1.3rem; color: var(--navy-900); margin: 36px 0 12px; font-weight: 800; }
+    h3 { font-size: 1.05rem; color: var(--navy-900); margin: 0 0 6px; font-weight: 700; }
+    .lead { font-size: 1.08rem; color: var(--muted); max-width: 70ch; margin: 0 0 8px; }
+    .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); padding: 20px; }
+    .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+    .pill { display: inline-block; font-size: .75rem; font-weight: 700; padding: 2px 10px; border-radius: 999px;
+            background: var(--forest-50); color: var(--forest-700); }
+    .pill.sun { background: var(--sunrise-100); color: #a24d06; }
+    .pill.navy { background: #e6eaf6; color: var(--navy); }
+    .avatar { width: 56px; height: 56px; border-radius: 50%; display: grid; place-items: center; color: #fff;
+              font-weight: 800; font-size: 1.4rem; flex: none; }
+    .persona-card { display: flex; flex-direction: column; gap: 10px; text-decoration: none; color: inherit;
+                    transition: transform .15s ease, box-shadow .15s ease; }
+    .persona-card:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(14,28,68,.1); color: inherit; }
+    .row { display: flex; gap: 14px; align-items: center; }
+    .muted { color: var(--muted); }
+    .small { font-size: .875rem; }
+    table { width: 100%; border-collapse: collapse; background: var(--card); font-size: .925rem; }
+    th, td { text-align: left; vertical-align: top; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+    th { background: var(--forest-50); color: var(--navy-900); font-weight: 700; }
+    .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); }
+    .table-wrap table { border: 0; }
+    .matrix td:not(:first-child), .matrix th:not(:first-child) { text-align: center; }
+    .matrix td.no { color: #a9b4bc; }
+    dl.profile { display: grid; grid-template-columns: minmax(140px, 200px) 1fr; margin: 0; }
+    dl.profile dt { font-weight: 700; color: var(--navy-900); padding: 12px 0; border-bottom: 1px solid var(--line); }
+    dl.profile dd { margin: 0; padding: 12px 0 12px 16px; border-bottom: 1px solid var(--line); }
+    dl.profile > :nth-last-child(-n+2) { border-bottom: 0; }
+    @media (max-width: 600px) {
+      dl.profile { grid-template-columns: 1fr; }
+      dl.profile dt { border-bottom: 0; padding-bottom: 0; }
+      dl.profile dd { padding-left: 0; padding-top: 2px; }
+      header.site nav { margin-left: 0; width: 100%; padding-bottom: 8px; }
+    }
+    blockquote { margin: 0; padding: 12px 16px; border-left: 4px solid var(--sunrise); background: var(--sunrise-100);
+                 border-radius: 0 10px 10px 0; font-style: italic; }
+    ol.steps { padding-left: 1.3rem; margin: 0; }
+    ol.steps li { margin: 6px 0; }
+    .scenario-part { display: grid; grid-template-columns: 150px 1fr; gap: 12px; padding: 14px 0; border-bottom: 1px solid var(--line); }
+    .scenario-part:last-child { border-bottom: 0; }
+    .scenario-part > strong { color: var(--navy-900); }
+    @media (max-width: 600px) { .scenario-part { grid-template-columns: 1fr; gap: 2px; } }
+    .exception { background: #fff6f0; border: 1px solid #f8d6bd; border-radius: 10px; padding: 10px 14px; }
+    .btn { display: inline-block; text-decoration: none; font-weight: 700; padding: 10px 16px; border-radius: 10px;
+           background: var(--forest); color: #fff; }
+    .btn:hover { background: var(--forest-700); color: #fff; }
+    .btn.ghost { background: transparent; color: var(--forest-700); border: 1px solid var(--forest-100); }
+    .btn.ghost:hover { background: var(--forest-50); }
+    .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 24px; }
+    footer { margin: 48px 0 0; padding: 24px 0 32px; border-top: 1px solid var(--line); background: var(--card); font-size: .85rem; color: var(--muted); }
+    .hero { background: linear-gradient(135deg, var(--navy-900), var(--forest-700)); color: #fff; padding: 40px 0 44px; }
+    .hero h1 { color: #fff; }
+    .hero .lead { color: #d9ebe3; }
+    .hero .pill { background: rgba(255,255,255,.15); color: #fff; }
+    ul.clean { list-style: none; padding: 0; margin: 0; }
+    ul.clean li { padding: 8px 0; border-bottom: 1px solid var(--line); }
+    ul.clean li:last-child { border-bottom: 0; }
+  </style>
+</head>
+<body>
+  <a href="#main" style="position:absolute;left:-999px" onfocus="this.style.left='8px'" onblur="this.style.left='-999px'">Skip to content</a>
+  <header class="site">
+    <div class="wrap">
+      <a class="brand" href="{% url 'ps4:index' %}">
+        <img src="{% static 'ps4/logo-mark.png' %}" alt="">
+        <span>{{ project.name }}<small>User research · PS3</small></span>
+      </a>
+      <nav aria-label="Research pages">
+        {% url 'ps4:index' as u_index %}{% url 'ps4:findings' as u_find %}{% url 'ps4:requirements' as u_req %}{% url 'ps4:mvp' as u_mvp %}
+        <a href="{{ u_index }}" {% if request.path == u_index %}aria-current="page"{% endif %}>Overview</a>
+        <a href="{{ u_index }}#personas">Personas</a>
+        <a href="{{ u_find }}" {% if request.path == u_find %}aria-current="page"{% endif %}>Findings</a>
+        <a href="{{ u_req }}" {% if request.path == u_req %}aria-current="page"{% endif %}>Requirements</a>
+        <a href="{{ u_mvp }}" {% if request.path == u_mvp %}aria-current="page"{% endif %}>MVP</a>
+      </nav>
+    </div>
+  </header>
+  {% block hero %}{% endblock %}
+  <main id="main" class="wrap">
+    {% block crumbs %}<p class="crumbs"><a href="{% url 'ps4:index' %}">← Back to PS4 index</a></p>{% endblock %}
+    {% block content %}{% endblock %}
+  </main>
+  <footer>
+    <div class="wrap">
+      <p style="margin:0 0 6px"><strong>{{ project.name }}</strong> · {{ project.team }} · FSAD 2026 Problem Set 3</p>
+      <p style="margin:0">Personas are fictional composites based on anonymised interviews. Participants are identified only by codes (P1, P2, …); no names, contact details or recordings are published.</p>
+    </div>
+  </footer>
+</body>
+</html>

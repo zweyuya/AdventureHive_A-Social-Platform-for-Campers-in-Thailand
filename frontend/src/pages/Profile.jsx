@@ -1,6 +1,7 @@
 import { Camera, ShieldCheck, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { OrganizerRecord } from "../components/cards";
 import { Avatar, ErrorNote, Field, Modal } from "../components/ui";
 import { api, apiUpload } from "../lib/api";
 import { useAuth } from "../lib/auth";
@@ -137,6 +138,11 @@ export default function Profile() {
         <button className="btn-primary">Save profile</button>
       </form>
       <EmergencyContact userId={user.id} />
+      <section className="card p-5">
+        <h2 className="font-bold">My record as an organizer</h2>
+        <OrganizerRecord stats={user.organizer} className="mt-2" />
+        <p className="mt-2 text-xs text-ink/55">Only completed trips with at least 2 attendees, at least half of them checked in with your trip code, count. Trips flagged as suspicious don't count, and your average appears after 3 different campers have rated you. You can't see who gave which rating.</p>
+      </section>
       <section id="reviews" className="card p-5">
         <h2 className="font-bold">My reviews</h2>
         {(reviews.data || []).length === 0 && <p className="mt-2 text-sm text-ink/60">You haven't written any reviews yet.</p>}

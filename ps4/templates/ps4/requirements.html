@@ -1,0 +1,52 @@
+{% extends "ps4/base.html" %}
+{% block title %}Permissions and requirements{% endblock %}
+{% block content %}
+<h1>Permissions and requirements</h1>
+<p class="lead">Who can do what, the user stories that guide development, and how personal data is handled.</p>
+
+<h2>Roles</h2>
+<div class="card"><ul class="clean">
+  {% for name, desc in roles %}<li><strong>{{ name }}</strong>: <span class="muted">{{ desc }}</span></li>{% endfor %}
+</ul></div>
+
+<h2>Permission matrix</h2>
+<div class="table-wrap">
+  <table class="matrix">
+    <thead><tr><th scope="col">Resource / action</th>{% for name, desc in roles %}<th scope="col" title="{{ desc }}">{{ name }}</th>{% endfor %}</tr></thead>
+    <tbody>
+      {% for action, cells in matrix %}
+      <tr><th scope="row" style="background:none;font-weight:600">{{ action }}</th>
+        {% for c in cells %}<td class="{% if c == '–' %}no{% endif %}">{% if c == '–' %}<span aria-label="not allowed">–</span>{% elif c == '✓' %}<span aria-label="allowed">✓</span>{% else %}{{ c }}{% endif %}</td>{% endfor %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+<p class="muted small">✓ allowed · – not allowed · “own” = only their own data. Every rule is checked by the server, not just hidden in the page.</p>
+
+<h2>User stories</h2>
+<div class="grid">
+  {% for s in stories %}
+  <div class="card">
+    <span class="pill">{{ s.id }}</span> <span class="pill {% if 'privacy' in s.priority or 'permission' in s.priority %}sun{% else %}navy{% endif %}">{{ s.priority }}</span>
+    <p style="margin:10px 0 8px;font-weight:600">{{ s.story }}</p>
+    <ul class="small muted" style="margin:0;padding-left:1.1rem">{% for c in s.criteria %}<li>{{ c }}</li>{% endfor %}</ul>
+  </div>
+  {% endfor %}
+</div>
+
+<h2>User data</h2>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th scope="col">Data</th><th scope="col">Why it is needed</th><th scope="col">Who can access it</th></tr></thead>
+    <tbody>{% for d, why, who in data_rows %}<tr><td>{{ d }}</td><td>{{ why }}</td><td>{{ who }}</td></tr>{% endfor %}</tbody>
+  </table>
+</div>
+
+<h2>Privacy, consent and ownership</h2>
+<div class="card"><ul class="clean">
+  {% for title, text in privacy_notes %}<li><strong>{{ title }}:</strong> {{ text }}</li>{% endfor %}
+</ul></div>
+
+<div class="actions"><a class="btn ghost" href="{% url 'ps4:index' %}">Back to PS4 index</a></div>
+{% endblock %}

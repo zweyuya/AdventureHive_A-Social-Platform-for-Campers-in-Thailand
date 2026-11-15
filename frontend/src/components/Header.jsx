@@ -1,4 +1,4 @@
-import { Bell, LogOut, Menu, Plus, Tent, User, X, FileText, Star } from "lucide-react";
+import { Bell, ClipboardList, LogOut, Menu, Plus, ShieldCheck, Tent, User, X, FileText, Star } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
@@ -22,6 +22,12 @@ function NotificationBell() {
   const [data, setData] = useState({ unread_count: 0, results: [] });
   const ref = useRef(null);
   const navigate = useNavigate();
+  // Admin notifications open the Django admin, which is not a route in this app.
+  const openLink = (link) => {
+    if (!link) return;
+    if (link.startsWith("/admin")) window.location.href = link;
+    else navigate(link);
+  };
   useClickOutside(ref, () => setOpen(false));
   const load = () => api("/notifications/").then(setData).catch(() => {});
   useEffect(() => { load(); const t = setInterval(load, 60000); return () => clearInterval(t); }, []);
@@ -50,7 +56,7 @@ function NotificationBell() {
             {data.results.length === 0 && <li className="px-4 py-6 text-center text-sm text-ink/60">You're all caught up.</li>}
             {data.results.map((n) => (
               <li key={n.id}>
-                <button onClick={() => { setOpen(false); n.link && navigate(n.link); }}
+                <button onClick={() => { setOpen(false); openLink(n.link); }}
                         className={`block w-full px-4 py-3 text-left text-sm hover:bg-forest-50 ${n.is_read ? "" : "bg-sunrise-100/40"}`}>
                   {n.message}
                   <span className="mt-0.5 block text-xs text-ink/50">{timeAgo(n.created_at)}</span>
@@ -72,8 +78,10 @@ function UserMenu({ user }) {
   useClickOutside(ref, () => setOpen(false));
   const go = (to) => { setOpen(false); navigate(to); };
   const items = [
-    [User, "My profile", "/profile"], [Tent, "My trips", "/trips?tab=mine"], [Plus, "Suggest a campsite", "/campsites/new"],
+    [User, "My profile", "/profile"], [ClipboardList, "Trips organised", "/trips/organised"],
+    [Tent, "My trips", "/trips?tab=mine"], [Plus, "Suggest a campsite", "/campsites/new"],
     [FileText, "My campsite submissions", "/my/submissions"], [Star, "My reviews", "/profile#reviews"],
+    ...(user.can_moderate ? [[ShieldCheck, "Campsite moderation", "/moderation"]] : []),
   ];
   return (
     <div className="relative" ref={ref}>

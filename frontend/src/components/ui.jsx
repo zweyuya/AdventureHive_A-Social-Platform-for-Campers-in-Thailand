@@ -1,4 +1,4 @@
-import { Star, X } from "lucide-react";
+import { CircleAlert, Star, X } from "lucide-react";
 import { useEffect } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "../lib/auth";
@@ -29,9 +29,9 @@ export function Stars({ value, size = 16 }) {
   );
 }
 
-export function StarPicker({ value, onChange }) {
+export function StarPicker({ value, onChange, label = "Rating" }) {
   return (
-    <div className="flex gap-1" role="radiogroup" aria-label="Rating">
+    <div className="flex gap-1" role="radiogroup" aria-label={label}>
       {[1, 2, 3, 4, 5].map((i) => (
         <button key={i} type="button" role="radio" aria-checked={value === i} aria-label={`${i} star${i > 1 ? "s" : ""}`}
                 onClick={() => onChange(i)} className="rounded p-0.5">
@@ -150,5 +150,16 @@ export function SectionHead({ title, action }) {
       <h2 className="text-lg font-bold">{title}</h2>
       {action}
     </div>
+  );
+}
+
+/** A campsite a member suggested that a moderator hasn't checked yet (status pending_review). */
+export const isUnverified = (c) => c?.status === "pending_review";
+export function NotVerifiedBadge({ className = "" }) {
+  return (
+    <span title="A member suggested this campsite. A moderator hasn't checked it yet."
+          className={`inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-900 ${className}`}>
+      <CircleAlert size={12} /> Not yet verified
+    </span>
   );
 }

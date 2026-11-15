@@ -9,17 +9,21 @@ from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
+from core.permissions import CanModerateCampsites
 from core.provinces import check_pin
 
 from . import services
 from .filters import CampsiteFilter
-from .models import Location, LocationRevision, LocationStatus, RevisionStatus
+from .models import Authority, Location, LocationRevision, LocationStatus, RevisionStatus
 from .serializers import (
+    AuthoritySerializer,
     CampsiteDetailSerializer,
     CampsiteListSerializer,
     CampsiteWriteSerializer,
+    PendingCampsiteSerializer,
     PinCheckSerializer,
     RejectSerializer,
     RevisionSerializer,
@@ -43,11 +47,13 @@ class CampsiteViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
     """
     Public browsing of published campsites, plus the member submission workflow.
 
-    list / retrieve     — anyone; only published campsites (submitters also see their own)
+    list / retrieve     — anyone; published campsites and ones waiting for a moderator
+                          ("Not yet verified"); submitters also see their own drafts
     create              — members; creates a DRAFT (not public)
     update / partial    — the submitter, only while draft or rejected
     submit              — the submitter: draft/rejected → pending_review
-    approve / reject    — staff: pending_review → published / rejected (note required)
+    moderation          — moderators: submissions waiting for a decision, oldest first
+    approve / reject    — moderators: pending_review → published / rejected (note required)
     mine                — the member's own submissions with their status
     pin-check           — members: province / inside-Thailand / nearby campsites for a map pin
     revisions (POST)    — suggest an edit to a published campsite (pending until approved)
@@ -66,21 +72,27 @@ class CampsiteViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
         qs = Location.objects.select_related("authority")
         user = self.request.user
         if self.action == "list":
-            return qs.published()
+            return qs.visible()
         if self.action in ("approve", "reject"):
-            return qs  # staff only, see get_permissions
+            return qs  # moderators only, see get_permissions
         if user.is_authenticated and user.is_staff:
             return qs
         if user.is_authenticated:
-            return qs.filter(Q(status=LocationStatus.PUBLISHED) | Q(created_by=user))
-        return qs.published()
+            return qs.filter(Q(pk__in=Location.objects.visible().values("pk")) | Q(created_by=user))
+        return qs.visible()
 
     def get_permissions(self):
         if self.action in ("list", "retrieve", "history"):
             return [permissions.AllowAny()]
-        if self.action in ("approve", "reject"):
-            return [permissions.IsAdminUser()]
+        if self.action in ("moderation", "approve", "reject"):
+            return [permissions.IsAuthenticated(), CanModerateCampsites()]
         return [permissions.IsAuthenticated()]
+
+    def get_throttles(self):
+        if self.action == "submit":  # unchecked campsites are public, so limit how many go out
+            self.throttle_scope = "campsite_submit"
+            return [ScopedRateThrottle()]
+        return super().get_throttles()
 
     def get_serializer_class(self):
         return {
@@ -116,6 +128,17 @@ class CampsiteViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(CampsiteDetailSerializer(location, context={"request": request}).data)
+
+    # ---- moderation queue ----------------------------------------------------
+    @extend_schema(responses=PendingCampsiteSerializer(many=True))
+    @action(detail=False, methods=["get"])
+    def moderation(self, request):
+        """Campsites waiting for a decision, oldest first, with pin check and possible duplicates."""
+        qs = Location.objects.filter(status=LocationStatus.PENDING_REVIEW) \
+            .select_related("authority", "created_by__profile").order_by("updated_at", "pk")
+        page = self.paginate_queryset(qs)
+        data = PendingCampsiteSerializer(page, many=True, context={"request": request}).data
+        return self.get_paginated_response(data)
 
     # ---- workflow actions ----------------------------------------------------
     @extend_schema(request=None, responses=CampsiteDetailSerializer)
@@ -168,12 +191,14 @@ class CampsiteViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
         if not (-90 <= lat <= 90 and -180 <= lng <= 180):
             raise ValidationError({"detail": "lat/lng out of range."})
         pin = check_pin(lat, lng)
-        nearby = services.nearby_campsites(lat, lng, queryset=Location.objects.published(),
+        # Include ones waiting for a moderator, so people don't submit the same place twice.
+        nearby = services.nearby_campsites(lat, lng, queryset=Location.objects.visible(),
                                            exclude_id=exclude)
         return Response(PinCheckSerializer({
             "latitude": lat, "longitude": lng, "in_thailand": pin.in_thailand,
             "country": pin.country, "province": pin.province, "provinces": sorted(pin.allowed),
             "nearby": [{"id": loc.id, "name": loc.name, "province": loc.province,
+                        "verified": loc.status == LocationStatus.PUBLISHED,
                         "distance_km": round(d, 2)} for loc, d in nearby],
         }).data)
 
@@ -193,7 +218,7 @@ class CampsiteViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
     @action(detail=True, methods=["get"])
     def history(self, request, pk=None):
         """Approved versions, newest first: who changed what, and when."""
-        location = get_object_or_404(Location.objects.published(), pk=pk)
+        location = get_object_or_404(Location.objects.visible(), pk=pk)  # none until approved
         qs = location.revisions.filter(status=RevisionStatus.APPROVED) \
             .select_related("edited_by__profile").order_by("-version_no")
         return Response(RevisionSerializer(qs, many=True).data)
@@ -235,16 +260,16 @@ class RevisionModerationViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
 )
 class CampsiteMapView(APIView):
     """
-    Lightweight GeoJSON for the map (published campsites only, no pagination).
+    Lightweight GeoJSON for the map (published and not-yet-verified campsites, no pagination).
     Accepts the same filters as the list.
     """
 
     permission_classes = [permissions.AllowAny]
 
     def get(self, request):
-        qs = CampsiteFilter(request.GET, queryset=Location.objects.published()).qs
+        qs = CampsiteFilter(request.GET, queryset=Location.objects.visible()).qs
         rows = qs.values("id", "name", "category", "province", "avg_rating",
-                         "latitude", "longitude", "cover_image")
+                         "latitude", "longitude", "cover_image", "status")
         features = [
             {
                 "type": "Feature",
@@ -253,6 +278,7 @@ class CampsiteMapView(APIView):
                 "properties": {
                     "id": r["id"], "name": r["name"], "category": r["category"],
                     "province": r["province"],
+                    "verified": r["status"] == LocationStatus.PUBLISHED,
                     "avg_rating": float(r["avg_rating"]) if r["avg_rating"] is not None else None,
                     "cover_image": f"{settings.MEDIA_URL_ABS}{r['cover_image']}" if r["cover_image"] else None,
                 },
@@ -261,3 +287,12 @@ class CampsiteMapView(APIView):
         ]
         return Response({"type": "FeatureCollection", "features": features})
 
+
+
+class AuthorityViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
+    """Park offices and other managers of campsites, for the "Managed by" dropdown. Public."""
+
+    queryset = Authority.objects.order_by("name")
+    serializer_class = AuthoritySerializer
+    permission_classes = [permissions.AllowAny]
+    pagination_class = None  # a short list

@@ -3,18 +3,25 @@ from rest_framework import serializers
 
 from accounts.models import EmergencyContact
 from core.people import avatar_url, display_name as _display_name, person
-from core.provinces import check_pin
+from core.provinces import check_pin, distance_km
 
 from communities.models import CampingGroup
 from locations.models import Location
 
 from .models import ParticipantStatus as PS
-from .models import Trip, TripEquipmentItem, TripParticipant, TripStatus
+from .models import AttendanceAppeal, Trip, TripEquipmentItem, TripParticipant, TripStatus
 from .services import (
+    APPEAL_WINDOW,
+    ATTENDANCE_WINDOW,
+    appeal_is_open,
     checkin_is_open,
     checkin_window,
     emergency_window,
+    duplicate_guard,
+    duplicate_trip_error,
     emergency_window_is_open,
+    in_priority_window,
+    past_attendees,
     update_trip,
 )
 
@@ -79,11 +86,25 @@ class TripDetailSerializer(TripListSerializer):
         help_text="Emergency-contact sharing: the window the organizer can read shared "
                   "contacts in, and whether the current user shares theirs.")
 
+    appeal = serializers.SerializerMethodField(
+        help_text="The current user's no-show appeal: whether they can appeal, or its outcome. "
+                  "Null if none of this applies to them.")
+    organizer_stats = serializers.SerializerMethodField(
+        help_text="The organizer's record: trips run, campers, cancellations and rating. Only "
+                  "trips that are hard to fake count (see reviews.services.counted_trips).")
+    priority = serializers.SerializerMethodField(
+        help_text="A repeated trip: until `until`, only people who attended the previous trip "
+                  "(`repeat_of`) may join. Null when there is no such window.")
+    meeting_distance_km = serializers.SerializerMethodField(
+        help_text="Straight-line (great-circle) distance from the meeting point to the campsite, "
+                  "in km. Null when there is no meeting point, or when it is hidden from this user.")
+
     class Meta(TripListSerializer.Meta):
         fields = TripListSerializer.Meta.fields + [
             "activity_type", "description", "distance_km", "estimated_duration_hours",
             "safety_notes", "meeting_point_name", "meeting_latitude", "meeting_longitude",
-            "equipment_items", "waitlist_count", "can_review", "checkin", "emergency", "created_at",
+            "equipment_items", "waitlist_count", "can_review", "checkin", "emergency", "appeal",
+            "meeting_distance_km", "organizer_stats", "priority", "created_at",
             "updated_at",
         ]
 
@@ -106,6 +127,42 @@ class TripDetailSerializer(TripListSerializer):
         return {"opens_at": opens, "closes_at": closes, "is_open": emergency_window_is_open(obj),
                 "i_share": sharing, "i_have_contact": has_contact}
 
+    def get_priority(self, obj) -> dict | None:
+        if not in_priority_window(obj):
+            return None
+        user = self.context["request"].user
+        return {
+            "until": obj.priority_until,
+            "repeat_of": {"id": obj.repeat_of_id, "title": obj.repeat_of.title},
+            "i_am_invited": user.is_authenticated and past_attendees(obj).filter(pk=user.pk).exists(),
+        }
+
+    def get_organizer_stats(self, obj) -> dict:
+        from reviews.services import organizer_stats  # local import: reviews depends on trips
+        return organizer_stats(obj.organizer)
+
+    def get_meeting_distance_km(self, obj) -> float | None:
+        if obj.meeting_latitude is None or obj.meeting_longitude is None:
+            return None
+        return round(distance_km(obj.meeting_latitude, obj.meeting_longitude,
+                                 obj.location.latitude, obj.location.longitude), 1)
+
+    def get_appeal(self, obj) -> dict | None:
+        user = self.context["request"].user
+        if not user.is_authenticated:
+            return None
+        mine = obj.participants.filter(user=user).select_related("appeal").first()
+        appeal = getattr(mine, "appeal", None)
+        if mine is None or (mine.status != PS.NO_SHOW and appeal is None):
+            return None
+        return {
+            "can_appeal": appeal is None and appeal_is_open(obj),
+            "closes_at": obj.end_datetime + APPEAL_WINDOW,
+            "status": appeal.status if appeal else None,
+            "reason": appeal.reason if appeal else None,
+            "decision_note": appeal.decision_note if appeal else None,
+        }
+
     def get_waitlist_count(self, obj) -> int:
         return obj.participants.filter(status=PS.WAITLISTED).count()
 
@@ -126,7 +183,9 @@ class TripDetailSerializer(TripListSerializer):
             instance.organizer_id == user.pk or data["my_status"] in (PS.CONFIRMED, PS.ATTENDED)
         )
         if not can_see_meeting_point:  # exact meeting point is private to the group
-            for key in ("meeting_point_name", "meeting_latitude", "meeting_longitude"):
+            # The distance goes too: with the public campsite pin it would narrow down the spot.
+            for key in ("meeting_point_name", "meeting_latitude", "meeting_longitude",
+                        "meeting_distance_km"):
                 data[key] = None
             data["meeting_point_hidden"] = True
         return data
@@ -136,6 +195,13 @@ class TripWriteSerializer(serializers.ModelSerializer):
     location_id = serializers.PrimaryKeyRelatedField(
         queryset=Location.objects.published(), source="location",
         help_text="A published campsite.",
+        error_messages={"does_not_exist": "Trips can only be organised at campsites a moderator "
+                                          "has checked. This one isn't verified yet."},
+    )
+    repeat_of_id = serializers.PrimaryKeyRelatedField(
+        queryset=Trip.objects.all(), source="repeat_of", required=False, allow_null=True,
+        help_text="'Repeat this trip': your own earlier, completed trip. Its attendees are "
+                  "invited when this one is published, and may join first for 48 hours.",
     )
     group_id = serializers.PrimaryKeyRelatedField(
         queryset=CampingGroup.objects.all(), source="group", required=False, allow_null=True,
@@ -146,7 +212,10 @@ class TripWriteSerializer(serializers.ModelSerializer):
         fields = ["location_id", "group_id", "title", "description", "start_datetime",
                   "end_datetime", "meeting_point_name", "meeting_latitude", "meeting_longitude",
                   "difficulty", "distance_km", "estimated_duration_hours",
-                  "participant_capacity", "min_experience_level", "safety_notes"]
+                  "participant_capacity", "min_experience_level", "safety_notes", "repeat_of_id"]
+
+    def validate_title(self, value):
+        return " ".join(value.split())  # "Khao  Yai " -> "Khao Yai"
 
     def validate_participant_capacity(self, value):
         if value < 1:
@@ -179,10 +248,58 @@ class TripWriteSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({"group_id": "You are not a member of this group."})
         if inst and inst.status in (TripStatus.CANCELLED, TripStatus.COMPLETED):
             raise serializers.ValidationError(f"A {inst.status} trip cannot be edited.")
+
+        if "repeat_of" in attrs:
+            original = attrs["repeat_of"]
+            if inst is not None and original != inst.repeat_of:
+                raise serializers.ValidationError({"repeat_of_id": "This can only be set when the trip is created."})
+            if original and (original.organizer_id != user.pk or original.status != TripStatus.COMPLETED):
+                raise serializers.ValidationError(
+                    {"repeat_of_id": "You can only repeat a completed trip that you organised."})
+
+        title = attrs.get("title", inst.title if inst else "")
+        organizer = inst.organizer if inst else user
+        if error := duplicate_trip_error(organizer, title, start, end, inst.pk if inst else None):
+            raise serializers.ValidationError(error)
         return attrs
+
+    def create(self, validated_data):
+        with duplicate_guard():
+            return super().create(validated_data)
 
     def update(self, instance, validated_data):
         return update_trip(instance, validated_data)
+
+
+class AppealSerializer(serializers.ModelSerializer):
+    reason = serializers.CharField(max_length=2000)
+
+    class Meta:
+        model = AttendanceAppeal
+        fields = ["reason", "status", "decision_note", "created_at"]
+        read_only_fields = ["status", "decision_note", "created_at"]
+
+
+class OrganisedTripSerializer(TripListSerializer):
+    """A trip on the organizer's dashboard, with what needs their attention."""
+
+    waitlist_count = serializers.IntegerField(read_only=True)
+    needs_attendance = serializers.SerializerMethodField(
+        help_text="Completed, attendance not fully recorded, and still within the 7 days to do it.")
+    attendance_due = serializers.SerializerMethodField()
+    open_appeals = serializers.IntegerField(read_only=True)
+
+    class Meta(TripListSerializer.Meta):
+        fields = TripListSerializer.Meta.fields + [
+            "waitlist_count", "needs_attendance", "attendance_due", "open_appeals", "flag_status",
+            "repeat_of"]
+
+    def get_attendance_due(self, obj):
+        return obj.end_datetime + ATTENDANCE_WINDOW if obj.status == TripStatus.COMPLETED else None
+
+    def get_needs_attendance(self, obj) -> bool:
+        return (obj.status == TripStatus.COMPLETED and obj.n_unmarked > 0
+                and timezone.now() <= obj.end_datetime + ATTENDANCE_WINDOW)
 
 
 class ParticipantSerializer(serializers.ModelSerializer):

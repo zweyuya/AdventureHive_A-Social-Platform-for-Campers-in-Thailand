@@ -107,7 +107,7 @@ function RecentReviews() {
 
 export default function Dashboard() {
   const trips = useApi("/trips/?page_size=3");
-  const top = useApi("/campsites/?ordering=-review_count&page_size=4");
+  const top = useApi("/campsites/?verified=true&ordering=-review_count&page_size=4");
   return (
     <div className="mx-auto grid max-w-7xl gap-6 px-4 py-6 lg:grid-cols-[1fr_320px]">
       <div className="min-w-0 space-y-8">

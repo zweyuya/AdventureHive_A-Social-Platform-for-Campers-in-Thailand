@@ -4,6 +4,7 @@ from django.utils import timezone
 from rest_framework import serializers
 
 from core.models import ExperienceLevel
+from core.permissions import can_moderate_campsites
 
 from .models import EmergencyContact, InterestTag, Profile, User
 
@@ -81,6 +82,11 @@ class LoginSerializer(serializers.Serializer):
 # ---------------------------------------------------------------------------
 # Profiles
 # ---------------------------------------------------------------------------
+def _organizer_stats(user) -> dict:
+    from reviews.services import organizer_stats  # local import: reviews depends on accounts
+    return organizer_stats(user)
+
+
 class PublicProfileSerializer(serializers.ModelSerializer):
     """What anyone may see. No email, phone, birth date or gender."""
 
@@ -91,13 +97,17 @@ class PublicProfileSerializer(serializers.ModelSerializer):
         return obj.avatar.url if obj.avatar else None
     interest_tags = InterestTagSerializer(many=True, read_only=True)
     member_since = serializers.DateTimeField(source="user.created_at", read_only=True)
+    organizer = serializers.SerializerMethodField(help_text="Their record as a trip organizer.")
 
     class Meta:
         model = Profile
         fields = [
             "id", "display_name", "avatar", "bio", "city",
-            "camping_experience_level", "interest_tags", "member_since",
+            "camping_experience_level", "interest_tags", "member_since", "organizer",
         ]
+
+    def get_organizer(self, obj) -> dict:
+        return _organizer_stats(obj.user)
 
 
 class PrivateProfileSerializer(serializers.ModelSerializer):
@@ -119,17 +129,26 @@ class PrivateProfileSerializer(serializers.ModelSerializer):
         queryset=InterestTag.objects.all(), many=True, required=False,
         write_only=True, source="interest_tags",
     )
+    can_moderate = serializers.SerializerMethodField(
+        help_text="Whether to show the moderation page. The API checks this again on every request.")
+    organizer = serializers.SerializerMethodField(help_text="My record as a trip organizer.")
 
     class Meta:
         model = Profile
         fields = [
-            "id", "email", "status", "pdpa_consent_at", "phone",
+            "id", "email", "status", "pdpa_consent_at", "phone", "can_moderate", "organizer",
             "display_name", "avatar", "bio", "date_of_birth", "gender", "city",
             "camping_experience_level", "interest_tags", "interest_tag_ids",
         ]
 
     def get_avatar(self, obj) -> str | None:
         return obj.avatar.url if obj.avatar else None
+
+    def get_can_moderate(self, obj) -> bool:
+        return can_moderate_campsites(obj.user)
+
+    def get_organizer(self, obj) -> dict:
+        return _organizer_stats(obj.user)
 
     def validate_phone(self, value):
         value = value or None

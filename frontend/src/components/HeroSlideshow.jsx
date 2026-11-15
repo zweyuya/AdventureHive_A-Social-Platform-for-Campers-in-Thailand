@@ -18,7 +18,7 @@ function prefersReducedMotion() {
  * when the visitor has asked for reduced motion. Falls back to an illustration.
  */
 export default function HeroSlideshow({ children }) {
-  const { data } = useApi(`/campsites/?has_photo=true&ordering=-review_count&page_size=${MAX_SLIDES}`);
+  const { data } = useApi(`/campsites/?has_photo=true&verified=true&ordering=-review_count&page_size=${MAX_SLIDES}`);
   const slides = results(data).slice(0, MAX_SLIDES);
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(false);

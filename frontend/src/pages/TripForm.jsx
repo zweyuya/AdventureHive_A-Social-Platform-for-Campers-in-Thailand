@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { PinPicker, campIcon } from "../components/maps";
 import { ErrorNote, Field, Spinner } from "../components/ui";
 import { api, ApiError, results } from "../lib/api";
+import { aboutKm, distanceKm } from "../lib/geo";
 import { useApi } from "../lib/hooks";
 import { DIFFICULTIES, LEVELS, label } from "../lib/format";
 
@@ -26,9 +27,12 @@ export default function TripForm() {
   const editing = !!id;
   const [params] = useSearchParams();
   const navigate = useNavigate();
-  const campsites = useApi("/campsites/?page_size=100");
+  const campsites = useApi("/campsites/?page_size=100&verified=true");
   const myGroups = useApi("/groups/mine/");
   const existing = useApi(editing ? `/trips/${id}/` : null);
+  // "Repeat this trip": start from an earlier trip, with new dates.
+  const repeatId = !editing ? params.get("repeat") : null;
+  const original = useApi(repeatId ? `/trips/${repeatId}/` : null);
   const [start, end] = defaultDates();
   const [form, setForm] = useState({
     title: "", description: "", location_id: params.get("campsite") || "", group_id: "",
@@ -51,6 +55,19 @@ export default function TripForm() {
       min_experience_level: t.min_experience_level, participant_capacity: t.participant_capacity, safety_notes: t.safety_notes,
     });
   }, [existing.data]);
+
+  useEffect(() => {
+    const t = original.data;
+    if (!t) return;
+    setForm((f) => ({
+      ...f, title: t.title, description: t.description, location_id: String(t.location.id), group_id: t.group ? String(t.group) : "",
+      meeting_point_name: t.meeting_point_name || "", meeting: t.meeting_latitude ? [t.meeting_latitude, t.meeting_longitude] : null,
+      difficulty: t.difficulty, distance_km: t.distance_km ?? "", estimated_duration_hours: t.estimated_duration_hours ?? "",
+      min_experience_level: t.min_experience_level, participant_capacity: t.participant_capacity, safety_notes: t.safety_notes,
+    }));
+    if (t.equipment_items?.length)
+      setEquipment(t.equipment_items.map(({ item_name, required, provided_by, notes }) => ({ item_name, required, provided_by, notes })));
+  }, [original.data]);
 
   const site = useMemo(() => results(campsites.data).find((c) => String(c.id) === String(form.location_id)), [campsites.data, form.location_id]);
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
@@ -84,6 +101,7 @@ export default function TripForm() {
       meeting_point_name: form.meeting_point_name, meeting_latitude: form.meeting?.[0] ?? null, meeting_longitude: form.meeting?.[1] ?? null,
       difficulty: form.difficulty, distance_km: form.distance_km || null, estimated_duration_hours: form.estimated_duration_hours || null,
       min_experience_level: form.min_experience_level, participant_capacity: Number(form.participant_capacity), safety_notes: form.safety_notes,
+      ...(repeatId ? { repeat_of_id: Number(repeatId) } : {}),
     };
     try {
       if (editing && existing.data && new Date(existing.data.start_datetime).getTime() === new Date(body.start_datetime).getTime())
@@ -106,13 +124,18 @@ export default function TripForm() {
       <Link to={editing ? `/trips/${id}` : "/trips"} className="btn-ghost -ml-3 mb-2 px-3 py-1.5"><ArrowLeft size={16} /> Back</Link>
       <div className="mb-5 flex flex-wrap items-center gap-3">
         <div className="mr-auto">
-          <h1 className="text-2xl font-extrabold">{editing ? "Edit trip" : "Create a camping trip"}</h1>
-          <p className="text-ink/60">{editing ? "Participants are notified if you change the dates or meeting point." : "Share your plan and invite others to join."}</p>
+          <h1 className="text-2xl font-extrabold">{editing ? "Edit trip" : repeatId ? "Repeat a trip" : "Create a camping trip"}</h1>
+          <p className="text-ink/60">{editing ? "Participants are notified if you change the dates or meeting point."
+            : repeatId ? `Copied from "${original.data?.title || "your trip"}". Pick new dates. When you publish, everyone who came last time is invited and can join first for 48 hours.`
+            : "Share your plan and invite others to join."}</p>
         </div>
         {!editing && <button className="btn-outline" disabled={busy} onClick={() => save(false)}>Save as draft</button>}
         <button className="btn-primary" disabled={busy} onClick={() => save(!editing)}>{editing ? "Save changes" : "Publish trip"}</button>
       </div>
       {errors.form && <ErrorNote error={errors.form} className="mb-4" />}
+      {errors.conflicting_trip_id && (
+        <p className="-mt-2 mb-4 text-sm"><Link to={`/trips/${errors.conflicting_trip_id}`} target="_blank" className="link">Open the trip that's in the way</Link></p>
+      )}
 
       <form onSubmit={(e) => { e.preventDefault(); save(!editing); }} className="grid gap-5 lg:grid-cols-2">
         <div className="space-y-5">
@@ -158,6 +181,7 @@ export default function TripForm() {
                 <p className="mt-1 text-sm text-ink/75">
                   <span className="font-mono text-xs">{form.meeting[0].toFixed(5)}, {form.meeting[1].toFixed(5)}</span>
                   {meetInfo?.in_thailand && <> · <span className="font-semibold">{meetInfo.province}</span></>}
+                  {site && <> · {aboutKm(distanceKm(form.meeting, [site.latitude, site.longitude]))} to the campsite in a straight line</>}
                 </p>
               )}
               {meetInfo && !meetInfo.in_thailand && (
@@ -186,7 +210,7 @@ export default function TripForm() {
               </div>
             </fieldset>
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Distance (km)" error={errors.distance_km}><input type="number" min="0" step="0.1" className="input" value={form.distance_km} onChange={set("distance_km")} /></Field>
+              <Field label="Hiking distance (km)" error={errors.distance_km} hint="How far the group walks on the trip itself."><input type="number" min="0" step="0.1" className="input" value={form.distance_km} onChange={set("distance_km")} /></Field>
               <Field label="Estimated duration (hours)" error={errors.estimated_duration_hours}><input type="number" min="0" step="0.5" className="input" value={form.estimated_duration_hours} onChange={set("estimated_duration_hours")} /></Field>
             </div>
             <Field label="Minimum experience level">

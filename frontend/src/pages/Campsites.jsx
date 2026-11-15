@@ -38,6 +38,10 @@ function Filters({ draft, setDraft, onApply, onClear }) {
                  onChange={() => setDraft({ ...draft, permit_status: draft.permit_status ? "" : "required" })} /> Permit required
         </label>
       </fieldset>
+      <label className="flex items-center gap-2 text-sm">
+        <input type="checkbox" className="h-4 w-4 accent-forest-700" checked={draft.verified === "true"}
+               onChange={() => setDraft({ ...draft, verified: draft.verified ? "" : "true" })} /> Only campsites checked by a moderator
+      </label>
       <label className="block"><span className="label">Minimum rating: {draft.min_rating || "any"}</span>
         <input type="range" min="0" max="5" step="1" value={draft.min_rating || 0} className="w-full accent-forest-700"
                onChange={(e) => setDraft({ ...draft, min_rating: e.target.value === "0" ? "" : e.target.value })} />
@@ -48,7 +52,7 @@ function Filters({ draft, setDraft, onApply, onClear }) {
   );
 }
 
-const KEYS = ["search", "province", "category", "has_water_source", "has_restrooms", "fire_pit_allowed", "permit_status", "min_rating"];
+const KEYS = ["search", "province", "category", "has_water_source", "has_restrooms", "fire_pit_allowed", "permit_status", "min_rating", "verified"];
 
 export default function Campsites() {
   const [params, setParams] = useSearchParams();
@@ -89,7 +93,13 @@ export default function Campsites() {
           <Filters draft={draft} setDraft={setDraft} onApply={() => apply()} onClear={() => { const empty = Object.fromEntries(KEYS.map((k) => [k, ""])); setDraft(empty); apply(empty); }} />
         </aside>
         <section aria-live="polite">
-          <p className="mb-2 text-sm text-ink/60">{features.length} campsite{features.length === 1 ? "" : "s"} found</p>
+          <p className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-ink/60">
+            <span className="mr-auto">{features.length} campsite{features.length === 1 ? "" : "s"} found</span>
+            {features.some((f) => f.properties.verified === false) && <>
+              <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-forest-700" /> Checked by a moderator</span>
+              <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-[#8a94a6]" /> Not yet verified</span>
+            </>}
+          </p>
           {view === "map" ? (
             <div className="card h-[560px] overflow-hidden">
               {geo.loading ? <Spinner /> : <CampsiteMap features={features} className="h-full w-full" />}

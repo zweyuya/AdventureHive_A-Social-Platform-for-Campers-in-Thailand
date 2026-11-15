@@ -3,7 +3,7 @@ import "leaflet/dist/leaflet.css";
 import { useEffect, useRef } from "react";
 import { MapContainer, Marker, Popup, TileLayer, Tooltip, useMap, useMapEvents } from "react-leaflet";
 import { Link } from "react-router-dom";
-import { Stars } from "./ui";
+import { NotVerifiedBadge, Stars } from "./ui";
 
 export const THAILAND_CENTER = [13.4, 100.9];
 const TILE = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
@@ -16,6 +16,8 @@ const pinHtml = (colour) => `
   </svg>`;
 export const campIcon = L.divIcon({ html: pinHtml("#0f6647"), className: "", iconSize: [34, 42], iconAnchor: [17, 41], popupAnchor: [0, -36] });
 export const meetIcon = L.divIcon({ html: pinHtml("#f58a1f"), className: "", iconSize: [34, 42], iconAnchor: [17, 41], popupAnchor: [0, -36] });
+/** Grey pin: a campsite a moderator hasn't checked yet. */
+export const unverifiedIcon = L.divIcon({ html: pinHtml("#8a94a6"), className: "", iconSize: [34, 42], iconAnchor: [17, 41], popupAnchor: [0, -36] });
 
 function FitBounds({ points, maxZoom = 9 }) {
   const map = useMap();
@@ -59,12 +61,14 @@ export function CampsiteMap({ features, className = "h-full", fit = true }) {
       <TileLayer url={TILE} attribution={ATTRIBUTION} />
       {fit && <FitBounds points={points} />}
       {features.map((f) => (
-        <Marker key={f.properties.id} position={[f.geometry.coordinates[1], f.geometry.coordinates[0]]} icon={campIcon}>
+        <Marker key={f.properties.id} position={[f.geometry.coordinates[1], f.geometry.coordinates[0]]}
+                icon={f.properties.verified === false ? unverifiedIcon : campIcon}>
           <Popup>
             <div className="min-w-48">
               {f.properties.cover_image && <img src={f.properties.cover_image} alt="" className="mb-2 h-24 w-full rounded-lg object-cover" />}
               <p className="text-sm font-bold text-navy-900">{f.properties.name}</p>
               <p className="text-xs text-ink/60">{f.properties.province} · {f.properties.category}</p>
+              {f.properties.verified === false && <NotVerifiedBadge className="mt-1" />}
               {f.properties.avg_rating
                 ? <p className="mt-1 flex items-center gap-1 text-xs"><Stars value={f.properties.avg_rating} size={12} /> {f.properties.avg_rating.toFixed(1)}</p>
                 : <p className="mt-1 text-xs text-ink/50">No reviews yet</p>}

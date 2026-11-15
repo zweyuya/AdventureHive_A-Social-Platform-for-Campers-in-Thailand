@@ -133,10 +133,14 @@ def test_pin_check_reports_province_and_nearby_campsites(member, location):
 
 
 @pytest.mark.django_db
-def test_pin_check_ignores_unpublished_campsites(member, location):
-    location.status = LocationStatus.PENDING_REVIEW
+def test_pin_check_ignores_drafts_but_warns_about_unverified(member, location):
+    location.status = LocationStatus.DRAFT
     location.save()
     assert member.get("/api/campsites/pin-check/?lat=15.404&lng=105.502").json()["nearby"] == []
+    location.status = LocationStatus.PENDING_REVIEW  # waiting for a moderator: still a duplicate risk
+    location.save()
+    nearby = member.get("/api/campsites/pin-check/?lat=15.404&lng=105.502").json()["nearby"]
+    assert [(n["id"], n["verified"]) for n in nearby] == [(location.pk, False)]
 
 
 @pytest.mark.django_db

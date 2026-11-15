@@ -76,8 +76,13 @@ class Authority(models.Model):
 
 class LocationQuerySet(models.QuerySet):
     def published(self):
-        """The ONLY queryset public endpoints and the map may use."""
+        """Checked by a moderator. Trips, questions, reviews and edits need this."""
         return self.filter(status=LocationStatus.PUBLISHED)
+
+    def visible(self):
+        """What the public may browse: published campsites, plus submissions waiting for a
+        moderator, which are shown as "Not yet verified". Drafts and rejected ones stay private."""
+        return self.filter(status__in=[LocationStatus.PUBLISHED, LocationStatus.PENDING_REVIEW])
 
 
 class Location(TimeStampedModel):
@@ -107,6 +112,8 @@ class Location(TimeStampedModel):
         max_length=20, choices=PermitStatus.choices, default=PermitStatus.UNKNOWN
     )
     permit_details = models.TextField(blank=True)
+    # Entry, camping and rental fees as campers see them, e.g. "Entry 100 THB · Camping 30 THB/night"
+    fees = models.CharField(max_length=300, blank=True)
     permit_booking_url = models.URLField(blank=True)
     rules = models.TextField(blank=True)
     permit_info_source = models.CharField(max_length=200, blank=True)

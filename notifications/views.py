@@ -5,6 +5,7 @@ from rest_framework.response import Response
 
 from locations.models import Location
 from qa.models import Question
+from reviews.models import Review
 from trips.models import Trip
 
 from .models import Notification, ReferenceType
@@ -14,6 +15,7 @@ _NAME_SOURCES = {
     ReferenceType.TRIP: (Trip, "title"),
     ReferenceType.LOCATION: (Location, "name"),
     ReferenceType.QUESTION: (Question, "title"),
+    ReferenceType.REVIEW: (Review, "location__name"),
 }
 
 

@@ -2,6 +2,7 @@ import { AlertTriangle, ArrowLeft, MapPin } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { PinPicker, campIcon } from "../components/maps";
+import PermitFields, { permitBody } from "../components/PermitFields";
 import { ErrorNote, Field, Spinner } from "../components/ui";
 import { api, ApiError } from "../lib/api";
 import { useApi } from "../lib/hooks";
@@ -14,13 +15,14 @@ export default function SuggestCampsite() {
   const existing = useApi(id ? `/campsites/${id}/` : null);
   const [form, setForm] = useState({ name: "", province: "", category: "campsite", description: "", pin: null,
     terrain_type: "", has_water_source: false, has_restrooms: false, fire_pit_allowed: false, permit_status: "unknown",
-    permit_details: "", rules: "", permit_info_source: "" });
+    permit_details: "", fees: "", rules: "", permit_booking_url: "", authority_id: "", permit_info_source: "" });
   const [errors, setErrors] = useState({});
   const [busy, setBusy] = useState(false);
   const [pinInfo, setPinInfo] = useState(null);
   useEffect(() => {
     const c = existing.data; if (!c) return;
-    setForm({ ...form, ...Object.fromEntries(Object.keys(form).filter((k) => k in c).map((k) => [k, c[k] ?? ""])), pin: [c.latitude, c.longitude] });
+    setForm({ ...form, ...Object.fromEntries(Object.keys(form).filter((k) => k in c).map((k) => [k, c[k] ?? ""])),
+              authority_id: c.authority?.id ?? "", pin: [c.latitude, c.longitude] });
   }, [existing.data]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Where is the pin? Province, inside Thailand or not, and campsites already nearby.
@@ -52,7 +54,7 @@ export default function SuggestCampsite() {
     if (pinInfo && !pinInfo.in_thailand) return setErrors({ pin: "Move the pin inside Thailand first." });
     setBusy(true); setErrors({});
     const { pin, ...rest } = form;
-    const body = { ...rest, latitude: pin[0], longitude: pin[1] };
+    const body = { ...permitBody(rest), latitude: pin[0], longitude: pin[1] };
     try {
       const c = id ? await api(`/campsites/${id}/`, { method: "PATCH", body }) : await api("/campsites/", { method: "POST", body });
       if (submit) await api(`/campsites/${c.id}/submit/`, { method: "POST" });
@@ -99,10 +101,9 @@ export default function SuggestCampsite() {
             {form.pin ? <PinSummary pin={form.pin} info={pinInfo} />
               : <p className="mt-1 text-xs text-ink/55">Click where the campsite is. It must be inside Thailand.</p>}
           </div>
-          <Field label="Permit"><select className="input" value={form.permit_status} onChange={set("permit_status")}>
-            <option value="unknown">I don't know</option><option value="required">Required</option><option value="not_required">Not required</option></select></Field>
-          <Field label="Permit details / rules"><textarea className="input" rows={2} value={form.permit_details} onChange={set("permit_details")} /></Field>
-          <Field label="Source of this information" hint="e.g. Park website, phone call to the park office"><input className="input" value={form.permit_info_source} onChange={set("permit_info_source")} /></Field>
+        </section>
+        <section className="card p-5 lg:col-span-2">
+          <PermitFields form={form} setForm={setForm} errors={errors} />
         </section>
         <div className="flex flex-wrap gap-3 lg:col-span-2">
           <ErrorNote error={errors.form} className="w-full" />
@@ -135,7 +136,7 @@ function PinSummary({ pin, info }) {
           <p className="flex items-center gap-1.5 font-semibold"><AlertTriangle size={15} /> Already on AdventureHive within 1 km:</p>
           <ul className="ml-6 mt-1 list-disc">
             {info.nearby.map((c) => (
-              <li key={c.id}><Link to={`/campsites/${c.id}`} className="underline" target="_blank">{c.name}</Link> ({c.distance_km} km)</li>
+              <li key={c.id}><Link to={`/campsites/${c.id}`} className="underline" target="_blank">{c.name}</Link> ({c.distance_km} km{c.verified === false && ", not yet verified"})</li>
             ))}
           </ul>
           <p className="mt-1 text-xs">If it's the same place, open it and use "Suggest an edit" instead.</p>
