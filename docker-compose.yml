@@ -1,4 +1,4 @@
-# Production stack: PostgreSQL + Django (Gunicorn) + Caddy (HTTPS, static and media files).
+# Production stack: PostgreSQL + Django (Gunicorn) + Caddy (HTTPS, the React app, static and media files).
 #   First time:  bash deploy/docker/make-env.sh <your-dns-name>   then   docker compose up -d --build
 #   Update:      git pull   then   docker compose up -d --build
 # Data lives in named volumes (pgdata, media). Never run "docker compose down -v": it deletes them.
@@ -32,7 +32,9 @@ services:
       - media:/app/media
 
   caddy:
-    image: caddy:2.8-alpine
+    build:
+      context: .
+      dockerfile: deploy/docker/caddy.Dockerfile
     restart: unless-stopped
     ports:
       - "80:80"
@@ -40,7 +42,6 @@ services:
     environment:
       DOMAIN: ${DOMAIN:?set DOMAIN in .env}
     volumes:
-      - ./deploy/docker/Caddyfile:/etc/caddy/Caddyfile:ro
       - static:/srv/static:ro
       - media:/srv/media:ro
       - caddy_data:/data

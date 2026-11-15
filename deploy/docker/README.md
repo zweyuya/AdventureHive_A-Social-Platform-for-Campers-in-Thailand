@@ -1,6 +1,13 @@
 # Deploying AdventureHive with Docker (Azure VM)
 
-Stack: PostgreSQL 16 + Django/Gunicorn + Caddy (automatic HTTPS). Data is kept in Docker volumes.
+Stack: PostgreSQL 16 + Django/Gunicorn + Caddy (automatic HTTPS). Caddy also serves the React app,
+which is built inside its image (`deploy/docker/caddy.Dockerfile`). Data is kept in Docker volumes.
+
+| Path | Served by |
+|---|---|
+| `/api/`, `/admin/`, `/ps4/` | Django |
+| `/static/`, `/media/` | Caddy (files from Django) |
+| everything else (`/`, `/trips`, ...) | the React app |
 
 ## First deployment
 On the VM (Ubuntu 24.04, ports 22/80/443 open, DNS name label set):

@@ -1,9 +1,13 @@
 # Caddy gets and renews the HTTPS certificate for {$DOMAIN} automatically.
+#   /api, /admin, /ps4      -> Django (Gunicorn)
+#   /static, /media         -> files collected / uploaded by Django
+#   everything else         -> the React app (single-page app: unknown paths serve index.html)
 {$DOMAIN} {
 	encode gzip
 	request_body {
 		max_size 6MB
 	}
+
 	handle_path /static/* {
 		root * /srv/static
 		file_server
@@ -12,7 +16,15 @@
 		root * /srv/media
 		file_server
 	}
-	handle {
+
+	@django path /api /api/* /admin /admin/* /ps4 /ps4/*
+	handle @django {
 		reverse_proxy web:8000
+	}
+
+	handle {
+		root * /srv/frontend
+		try_files {path} /index.html
+		file_server
 	}
 }
