@@ -1,4 +1,4 @@
-import { ArrowLeft, Lock, MessageCircle, MoreVertical, Users } from "lucide-react";
+import { ArrowLeft, Lock, MoreVertical, Users } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { TripCard } from "../components/cards";
@@ -109,7 +109,6 @@ export default function GroupDetail() {
               : <p className="text-sm text-ink/70">This group is private. Ask an admin to add you.</p>)}
             {g.my_role && <>
               <p className="text-sm">You're a <span className="font-semibold">{ROLE_TEXT[g.my_role].toLowerCase()}</span> of this group.</p>
-              <Link to={`/groups/${g.id}/chat`} className="btn-outline mt-3 w-full"><MessageCircle size={16} /> Group chat</Link>
               <button className="btn-ghost mt-2 w-full text-red-700" onClick={() => act("DELETE")}>Leave group</button>
             </>}
             {g.my_role === "admin" && <button className="btn-danger mt-2 w-full" onClick={remove}>Delete group</button>}

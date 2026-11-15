@@ -3,7 +3,6 @@ import Header from "./components/Header";
 import { RequireAuth } from "./components/ui";
 import CampsiteDetail from "./pages/CampsiteDetail";
 import Campsites from "./pages/Campsites";
-import ChatPlaceholder from "./pages/ChatPlaceholder";
 import Dashboard from "./pages/Dashboard";
 import GroupDetail from "./pages/GroupDetail";
 import Groups from "./pages/Groups";
@@ -67,8 +66,6 @@ export default function App() {
         <Route path="trips/:id/edit" element={<Private><TripForm /></Private>} />
         <Route path="groups" element={<Groups />} />
         <Route path="groups/:id" element={<GroupDetail />} />
-        <Route path="groups/:id/chat" element={<Private><ChatPlaceholder /></Private>} />
-        <Route path="messages" element={<Private><ChatPlaceholder /></Private>} />
         <Route path="feed" element={<Private><Feed /></Private>} />
         <Route path="posts/:id" element={<PostDetail />} />
         <Route path="questions" element={<QuestionList />} />
