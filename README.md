@@ -5,7 +5,21 @@ trips with RSVP and a waitlist, check in with a trip code, and read reviews writ
 by people who really attended**.
 
 **Stack:** Django 5.2 + Django REST Framework + PostgreSQL (backend) · React 18 + Vite +
-Tailwind CSS + Leaflet/OpenStreetMap (frontend) · pytest (521 tests).
+Tailwind CSS + Leaflet/OpenStreetMap (frontend) · pytest (550+ tests).
+
+**Team:** The Layer Cake — Zwe Yu Ya Kyaw Zin Oo (st125990), Imtiaz Ahmad (st126685) · FSAD 2026, AIT
+
+## Live site
+
+| What | URL |
+|---|---|
+| The app | https://adventurehive.indonesiacentral.cloudapp.azure.com/ |
+| User research pages (PS3: personas, scenarios, findings, requirements, MVP) | https://adventurehive.indonesiacentral.cloudapp.azure.com/ps4/ |
+| Clickable prototype used in the user sessions | https://adventurehive.indonesiacentral.cloudapp.azure.com/ps4/prototype/ |
+| Django admin | https://adventurehive.indonesiacentral.cloudapp.azure.com/admin/ |
+
+Demo login: `nok@demo.adventurehive.test` / `DemoCamp123!` (fictional demo data; see
+[Demo data](#demo-data)).
 
 ## Main features
 
@@ -83,13 +97,14 @@ npm install        # first time only
 npm run dev
 ```
 
-Open **http://localhost:5173**. Vite forwards `/api` and `/admin` to Django, so the browser
-sees one site.
+Open **http://localhost:5173**. Vite forwards `/api`, `/admin` and `/ps4` to Django, so the
+browser sees one site.
 
 | URL | What |
 |---|---|
 | http://localhost:5173 | The app |
 | http://localhost:8000/admin/ | Django admin (moderator UI: approve campsites, hide reviews, flagged trips) |
+| http://localhost:8000/ps4/ | User research pages (PS3), no login needed |
 | http://localhost:8000/api/docs/ | Swagger UI |
 | http://localhost:8000/api/schema/ | OpenAPI schema |
 | http://localhost:8000/api/health/ | Liveness check (Django + DB) |
@@ -147,7 +162,8 @@ attendance is recorded; not to people who already posted). In production, run it
 ## Tests
 
 ```bash
-pytest                                   # all 521 tests (about 9-14 minutes)
+pytest                                   # all tests (about 9-14 minutes)
+pytest tests/test_ps4.py -q              # the /ps4/ research pages (21 tests)
 pytest tests/test_layer4_concurrency.py  # 20 users racing for the last seat
 pytest tests/test_duplicate_trips.py     # duplicate-trip rules
 pytest -m unit                           # fast unit tests only, no database
@@ -155,6 +171,65 @@ pytest -m unit                           # fast unit tests only, no database
 
 Tests need PostgreSQL: several rules (constraints, triggers, row locks, exclusion
 constraints) only exist there. The database user needs `CREATEDB`.
+
+## Deployment (Azure + Docker)
+
+The live site runs on a Microsoft Azure virtual machine (Azure for Students, Ubuntu 24.04,
+Standard B2als v2) with Docker Compose. The CSIM course server could only be reached from the
+AIT campus network, so remote interview participants could not open it; the TA approved using
+another server.
+
+| Container | Role |
+|---|---|
+| `db` | PostgreSQL 16; data in the `pgdata` volume |
+| `web` | Django + Gunicorn; runs `migrate` and `collectstatic` on start (`deploy/docker/entrypoint.sh`) |
+| `caddy` | Automatic HTTPS (Let's Encrypt); serves the built React app at `/`, static files and uploads (`media` volume); forwards `/api`, `/admin` and `/ps4` to Django |
+
+The React app is built inside the Caddy image (`deploy/docker/caddy.Dockerfile`), so the server
+needs only Docker and git. Settings come from a server-only `.env` file created once by
+`deploy/docker/make-env.sh`; it is never committed.
+
+**First-time data on the server**
+
+```bash
+docker compose exec web python manage.py seed_interest_tags
+docker compose exec web python manage.py seed_campsites
+docker compose exec web python manage.py seed_demo
+docker compose exec web python manage.py seed_demo_posts
+docker compose exec web python manage.py createsuperuser
+```
+
+**Update the live site** after pushing to `main`:
+
+```bash
+cd ~/adventurehive
+git pull
+docker compose up -d --build
+```
+
+Uploaded photos (`media`) and the database (`pgdata`) are kept across rebuilds. **Never run
+`docker compose down -v`**: the `-v` deletes both volumes. Photos uploaded locally are not copied
+to the server (they live in your local `media/` folder and database). More detail:
+[`deploy/docker/README.md`](deploy/docker/README.md).
+
+## User research pages (Problem Set 3)
+
+The `ps4` Django app publishes the user research for the course at `/ps4/`: an index, three
+persona profile pages (Mai the weekend camper, Krit the trip organizer, Fah the first-time
+camper), four usage scenarios, findings, the role/permission matrix and user stories, the
+revised MVP, and the clickable prototype used in the sessions. Pages are plain Django views
+and templates, public and login-free.
+
+| File | Purpose |
+|---|---|
+| `ps4/content.py` | All page content: participants (codes only), findings, personas, scenarios, permissions, user stories, decisions, MVP. Edit this file to update the pages |
+| `ps4/views.py`, `ps4/urls.py` | Views and routes (`personas/<slug>/`, `scenarios/<slug>/`, `findings/`, `requirements/`, `mvp/`, `prototype/`) |
+| `ps4/templates/ps4/` | Templates |
+| `ps4/static/ps4/prototype/` | Screenshots of the app (demo data) for the clickable prototype |
+| `tests/test_ps4.py` | Every page loads without login; links and prototype hotspots are valid |
+
+Participants appear only as codes (P1–P4). Raw interview notes and survey responses are not
+committed. The full PS3 report is submitted on Moodle; see [`ProbSet3/`](ProbSet3/).
 
 ## Project notes
 
@@ -479,5 +554,8 @@ verified review → campsite rating updated.
 5. ~~Reviews + Q&A endpoints~~ ✅ done.
 6. ~~React frontend~~ ✅ done.
 7. ~~Review credibility (check-in, two-sided attendance, flags, reports), security hardening, duplicate-trip rules~~ ✅ done.
-8. Final phase: deployment to the CSIM server; keeping campers connected (follow, "you camped
-   together", camping history); a moderation page in the React app; no-show appeals.
+8. ~~Moderation page in the React app, no-show appeals~~ ✅ done.
+9. ~~Deployment~~ ✅ done: Azure VM with Docker Compose and HTTPS (see [Deployment](#deployment-azure--docker)).
+10. ~~User research, personas and requirements validation (PS3)~~ ✅ done: `/ps4/` pages.
+11. Future work: keeping campers connected (follow, "you camped together", camping history);
+    real-time messaging and semantic search stay out of scope this semester.
