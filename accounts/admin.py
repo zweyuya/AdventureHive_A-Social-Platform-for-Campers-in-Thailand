@@ -35,6 +35,11 @@ class UserAdmin(BaseUserAdmin):
     search_fields = ("email",)
     readonly_fields = ("created_at", "last_login", "pdpa_consent_at")
     inlines = [ProfileInline]
+
+    def get_inlines(self, request, obj):
+        # A new user's profile is created by the post_save signal; showing the inline on
+        # the "Add user" page would try to create a second one (unique user_id error).
+        return self.inlines if obj else []
     actions = ["remove_profile_photos", "make_moderators", "remove_moderators", "delete_accounts"]
 
     @admin.action(description="Make campsite moderator (reviews submissions in the app only)")

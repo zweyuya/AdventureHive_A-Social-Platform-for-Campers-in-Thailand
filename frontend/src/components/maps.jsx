@@ -6,8 +6,9 @@ import { Link } from "react-router-dom";
 import { NotVerifiedBadge, Stars } from "./ui";
 
 export const THAILAND_CENTER = [13.4, 100.9];
-const TILE = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
-const ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+// Esri World Street Map: English labels, no API key. Note the {y}/{x} order.
+const TILE = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}";
+const ATTRIBUTION = 'Tiles &copy; Esri &mdash; Sources: Esri, HERE, Garmin, &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
 
 const pinHtml = (colour) => `
   <svg width="34" height="42" viewBox="0 0 34 42" xmlns="http://www.w3.org/2000/svg">
