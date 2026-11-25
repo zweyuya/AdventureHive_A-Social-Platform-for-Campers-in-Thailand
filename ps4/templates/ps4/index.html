@@ -1,4 +1,5 @@
 {% extends "ps4/base.html" %}
+{% load static %}
 {% block title %}PS4 index{% endblock %}
 {% block crumbs %}{% endblock %}
 {% block hero %}
@@ -12,6 +13,24 @@
 </section>
 {% endblock %}
 {% block content %}
+<h2 id="user-evaluation">Problem Set 4 · User evaluation</h2>
+<p class="muted">Peer critiques, real user feedback, and our action plan for the next version.</p>
+<div class="card">
+  <ul class="clean">
+    <li><a href="{% static 'ps4/evaluation/feedback-summary-action-plan.pdf' %}"><strong>Real user feedback, summary of criticism and action plan</strong></a> <span class="pill">PDF</span></li>
+  </ul>
+  <h3>Critiques we wrote</h3>
+  <ul class="clean">
+    <li><a href="{% static 'ps4/evaluation/critique-boothpos-untitled.pdf' %}">Critique of BoothPOS (team Untitled)</a> <span class="pill">PDF</span></li>
+    <li><a href="{% static 'ps4/evaluation/critique-coursewhisper-grame-noup.pdf' %}">Critique of CourseWhisper (team Grame Noup)</a> <span class="pill">PDF</span></li>
+  </ul>
+  <h3>Critiques we received</h3>
+  <ul class="clean">
+    <li><a href="{% static 'ps4/evaluation/critique-from-merge-conflict.pdf' %}">Critique from Merge Conflict</a> <span class="pill">PDF</span></li>
+    <li><a href="{% static 'ps4/evaluation/critique-from-lost.pdf' %}">Critique from Lost?</a> <span class="pill">PDF</span></li>
+  </ul>
+</div>
+
 <h2 id="personas">Personas</h2>
 <p class="muted">Fictional composites built from the interview findings. Select a persona to see their profile and usage scenario.</p>
 <div class="grid">
