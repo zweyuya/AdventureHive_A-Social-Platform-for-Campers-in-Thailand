@@ -553,16 +553,11 @@ register (PDPA) → browse campsites & map → create/publish trip → RSVP → 
 waitlisted → cancel → automatic promotion → trip completes → organizer marks attendance →
 verified review → campsite rating updated.
 
-## Next layers
-1. ~~Auth & profile endpoints~~ ✅ done.
-2. ~~Campsites & content workflow~~ ✅ done.
-3. ~~Community groups~~ ✅ done.
-4. ~~Trips, RSVP, waitlist, attendance~~ ✅ done.
-5. ~~Reviews + Q&A endpoints~~ ✅ done.
-6. ~~React frontend~~ ✅ done.
-7. ~~Review credibility (check-in, two-sided attendance, flags, reports), security hardening, duplicate-trip rules~~ ✅ done.
-8. ~~Moderation page in the React app, no-show appeals~~ ✅ done.
-9. ~~Deployment~~ ✅ done: Azure VM with Docker Compose and HTTPS (see [Deployment](#deployment-azure--docker)).
-10. ~~User research, personas and requirements validation (PS3)~~ ✅ done: `/ps4/` pages.
-11. Future work: keeping campers connected (follow, "you camped together", camping history);
-    real-time messaging and semantic search stay out of scope this semester.
+## Future Work
+- Keeping campers connected (follow, "you camped together", camping history)
+- Richer trip pages: things to do, place attractions, facilities, what to bring and estimated budget
+- Email-based "Forgot password?"
+- Paid trips with verified payments
+- Real-time messaging and semantic search 
+
+
