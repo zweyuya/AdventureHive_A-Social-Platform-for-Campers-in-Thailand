@@ -17,6 +17,7 @@ Tailwind CSS + Leaflet/OpenStreetMap (frontend) · pytest (550+ tests).
 | User research pages (PS3: personas, scenarios, findings, requirements, MVP) | https://adventurehive.indonesiacentral.cloudapp.azure.com/ps4/ |
 | Clickable prototype used in the user sessions | https://adventurehive.indonesiacentral.cloudapp.azure.com/ps4/prototype/ |
 | Django admin | https://adventurehive.indonesiacentral.cloudapp.azure.com/admin/ |
+| PS4 user evaluation (peer critiques, real user feedback, action plan) | https://adventurehive.indonesiacentral.cloudapp.azure.com/ps4/#user-evaluation |
 
 Demo login: `nok@demo.adventurehive.test` / `DemoCamp123!` (fictional demo data; see
 [Demo data](#demo-data)).
@@ -212,7 +213,7 @@ Uploaded photos (`media`) and the database (`pgdata`) are kept across rebuilds. 
 to the server (they live in your local `media/` folder and database). More detail:
 [`deploy/docker/README.md`](deploy/docker/README.md).
 
-## User research pages (Problem Set 3)
+## User research and evaluation pages (Problem Sets 3 and 4)
 
 The `ps4` Django app publishes the user research for the course at `/ps4/`: an index, three
 persona profile pages (Mai the weekend camper, Krit the trip organizer, Fah the first-time
@@ -220,13 +221,19 @@ camper), four usage scenarios, findings, the role/permission matrix and user sto
 revised MVP, and the clickable prototype used in the sessions. Pages are plain Django views
 and templates, public and login-free.
 
+The top of `/ps4/` also links the Problem Set 4 user evaluation: our critiques of BoothPOS
+(Untitled) and CourseWhisper (Grame Noup), the critiques we received from Merge Conflict and
+Lost?, and our real user feedback, summary of criticism and action plan (PDFs).
+
 | File | Purpose |
 |---|---|
 | `ps4/content.py` | All page content: participants (codes only), findings, personas, scenarios, permissions, user stories, decisions, MVP. Edit this file to update the pages |
 | `ps4/views.py`, `ps4/urls.py` | Views and routes (`personas/<slug>/`, `scenarios/<slug>/`, `findings/`, `requirements/`, `mvp/`, `prototype/`) |
 | `ps4/templates/ps4/` | Templates |
 | `ps4/static/ps4/prototype/` | Screenshots of the app (demo data) for the clickable prototype |
+| `ps4/static/ps4/evaluation/` | PS4 user evaluation PDFs linked from the index page |
 | `tests/test_ps4.py` | Every page loads without login; links and prototype hotspots are valid |
+
 
 Participants appear only as codes (P1–P4). Raw interview notes and survey responses are not
 committed. The full PS3 report is submitted on Moodle; see [`ProbSet3/`](ProbSet3/).
